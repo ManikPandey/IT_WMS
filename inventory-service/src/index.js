@@ -1,12 +1,27 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const Redis = require('ioredis');
+const cors = require('cors');
 
 const app = express();
 const prisma = new PrismaClient();
 const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
 app.use(express.json());
+app.use(cors());
+
+// Get all assets
+app.get('/assets', async (req, res) => {
+  try {
+    const assets = await prisma.asset.findMany({
+      orderBy: { created_at: 'desc' }
+    });
+    res.json(assets);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // Seed endpoint for testing
 app.post('/seed', async (req, res) => {

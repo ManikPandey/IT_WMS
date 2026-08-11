@@ -3,6 +3,7 @@ const { PrismaClient } = require('@prisma/client');
 const jwt = require('jsonwebtoken');
 const Redis = require('ioredis');
 const crypto = require('crypto');
+const cors = require('cors');
 
 const app = express();
 const prisma = new PrismaClient();
@@ -10,6 +11,7 @@ const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
 
 app.use(express.json());
+app.use(cors());
 
 // 1. Auth & RBAC
 app.post('/login', async (req, res) => {
@@ -59,6 +61,13 @@ app.post('/purchase-orders', requireAuth, async (req, res) => {
     }
   });
   res.status(201).json(po);
+});
+
+app.get('/purchase-orders', requireAuth, async (req, res) => {
+  const pos = await prisma.purchaseOrder.findMany({
+    orderBy: { created_at: 'desc' }
+  });
+  res.json(pos);
 });
 
 // 3. PO Approval with Idempotency
@@ -118,6 +127,22 @@ app.post('/purchase-orders/:id/approve', requireAuth, requireRole('ADMIN'), asyn
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+app.get('/audit-log', requireAuth, async (req, res) => {
+  const { entity_type } = req.query; // optional filter
+  
+  const where = {};
+  if (entity_type) {
+    where.event_type = { startsWith: entity_type };
+  }
+  
+  const logs = await prisma.auditLog.findMany({
+    where,
+    orderBy: { created_at: 'desc' },
+    take: 100
+  });
+  res.json(logs);
 });
 
 const port = process.env.PORT || 3000;
