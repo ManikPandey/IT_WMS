@@ -1,6 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { LayoutDashboard, Package, FileText, Activity, LogOut } from 'lucide-react';
+import { LayoutDashboard, Package, FileText, Activity, LogOut, Archive as ArchiveIcon } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 
 // Pages
@@ -10,15 +10,22 @@ import Inventory from './pages/Inventory';
 import PurchaseOrders from './pages/PurchaseOrders';
 import Maintenance from './pages/Maintenance';
 import Settings from './pages/Settings';
+import Archive from './pages/Archive';
 import { ToastProvider } from './components/ui';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false } }
 });
 
-const ProtectedRoute = ({ children }) => {
+const ProtectedRoute = ({ children, allowedRoles }) => {
   const token = localStorage.getItem('token');
+  const role = localStorage.getItem('role');
   if (!token) return <Navigate to="/login" replace />;
+  if (allowedRoles && !allowedRoles.includes(role)) {
+    // If not allowed, redirect to their home based on role
+    if (role === 'MAINTENANCE_CREW') return <Navigate to="/maintenance" replace />;
+    return <Navigate to="/" replace />;
+  }
   return children;
 };
 
@@ -53,16 +60,25 @@ const Layout = ({ children }) => {
           <h1 className="text-xl font-bold tracking-tight text-text">IT_WMS</h1>
         </div>
         <nav className="flex-1 px-4 space-y-1">
-          <SidebarItem to="/" icon={LayoutDashboard} label="Dashboard" />
-          <SidebarItem to="/inventory" icon={Package} label="Inventory" />
-          <SidebarItem to="/purchase-orders" icon={FileText} label="Purchase Orders" />
-          <SidebarItem to="/maintenance" icon={Activity} label="Maintenance" />
+          {role !== 'MAINTENANCE_CREW' && (
+            <>
+              <SidebarItem to="/" icon={LayoutDashboard} label="Dashboard" />
+              <SidebarItem to="/inventory" icon={Package} label="Inventory" />
+              <SidebarItem to="/purchase-orders" icon={FileText} label="Purchase Orders" />
+              <SidebarItem to="/archive" icon={ArchiveIcon} label="Retired Assets" />
+            </>
+          )}
+          {(role === 'ADMIN' || role === 'MAINTENANCE_CREW') && (
+            <SidebarItem to="/maintenance" icon={Activity} label="Maintenance" />
+          )}
         </nav>
         
         {/* Settings at the bottom */}
-        <div className="px-4 pb-4">
-          <SidebarItem to="/settings" icon={Activity} label="Settings" />
-        </div>
+        {role === 'ADMIN' && (
+          <div className="px-4 pb-4">
+            <SidebarItem to="/settings" icon={Activity} label="Settings" />
+          </div>
+        )}
 
         <div className="p-4 border-t border-border flex items-center justify-between">
           <div className="flex flex-col">
@@ -92,11 +108,12 @@ function App() {
         <Router>
           <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
-          <Route path="/inventory" element={<ProtectedRoute><Layout><Inventory /></Layout></ProtectedRoute>} />
-          <Route path="/purchase-orders" element={<ProtectedRoute><Layout><PurchaseOrders /></Layout></ProtectedRoute>} />
-          <Route path="/maintenance" element={<ProtectedRoute><Layout><Maintenance /></Layout></ProtectedRoute>} />
-          <Route path="/settings" element={<ProtectedRoute><Layout><Settings /></Layout></ProtectedRoute>} />
+          <Route path="/" element={<ProtectedRoute allowedRoles={['ADMIN', 'VIEWER']}><Layout><Dashboard /></Layout></ProtectedRoute>} />
+          <Route path="/inventory" element={<ProtectedRoute allowedRoles={['ADMIN', 'VIEWER']}><Layout><Inventory /></Layout></ProtectedRoute>} />
+          <Route path="/purchase-orders" element={<ProtectedRoute allowedRoles={['ADMIN', 'VIEWER']}><Layout><PurchaseOrders /></Layout></ProtectedRoute>} />
+          <Route path="/archive" element={<ProtectedRoute allowedRoles={['ADMIN', 'VIEWER']}><Layout><Archive /></Layout></ProtectedRoute>} />
+          <Route path="/maintenance" element={<ProtectedRoute allowedRoles={['ADMIN', 'MAINTENANCE_CREW']}><Layout><Maintenance /></Layout></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute allowedRoles={['ADMIN']}><Layout><Settings /></Layout></ProtectedRoute>} />
         </Routes>
       </Router>
       </ToastProvider>

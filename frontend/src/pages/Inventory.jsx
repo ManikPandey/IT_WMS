@@ -1,17 +1,20 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { StatusBadge, Button, Modal, useToast } from '../components/ui';
-import { Download, Upload, Plus, X } from 'lucide-react';
+import { Download, Upload, Plus, X, MoreVertical, AlertTriangle } from 'lucide-react';
 
 export default function Inventory() {
   const queryClient = useQueryClient();
   const showToast = useToast();
+  const role = localStorage.getItem('role');
   
   const [isAllocateOpen, setIsAllocateOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isStatusOpen, setIsStatusOpen] = useState(false);
+  const [isIssueOpen, setIsIssueOpen] = useState(false);
   
   const [allocateForm, setAllocateForm] = useState({ assetType: 'LAPTOP', assignedTo: 1, warehouseId: 1 });
-  const [createForm, setCreateForm] = useState({ asset_tag: '', type: '', warehouse_id: 1, category_id: '' });
+  const [createForm, setCreateForm] = useState({ asset_tag: '', serial_number: '', type: '', warehouse_id: 1, category_id: '' });
   const [properties, setProperties] = useState([]);
   
   const [search, setSearch] = useState('');
@@ -19,6 +22,11 @@ export default function Inventory() {
   const [categoryFilter, setCategoryFilter] = useState('');
   
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryParent, setNewCategoryParent] = useState('');
+
+  const [selectedAsset, setSelectedAsset] = useState(null);
+  const [newStatus, setNewStatus] = useState('');
+  const [issueForm, setIssueForm] = useState({ issue_type: '', description: '' });
 
   // Fetch Categories
   const { data: categories } = useQuery({
@@ -29,25 +37,40 @@ export default function Inventory() {
     }
   });
 
-  // Fetch Assets with filters
-  const { data: assets, isLoading } = useQuery({
-    queryKey: ['assets', categoryFilter, search],
+  const [cursor, setCursor] = useState(null);
+  const [allAssets, setAllAssets] = useState([]);
+  const [hasNextPage, setHasNextPage] = useState(false);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['assets', categoryFilter, search, statusFilter, cursor],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (categoryFilter) params.append('category_id', categoryFilter);
       if (search) params.append('search', search);
+      if (statusFilter) params.append('status', statusFilter);
+      if (cursor) params.append('cursor', cursor);
       const res = await fetch(`http://localhost:3001/assets?${params.toString()}`);
       return res.json();
     }
   });
 
+  React.useEffect(() => {
+    if (data?.data) {
+      if (cursor) setAllAssets(prev => [...prev, ...data.data]);
+      else setAllAssets(data.data);
+      setHasNextPage(!!data.nextCursor);
+    }
+  }, [data, cursor]);
+
+  const assets = allAssets;
+
   // Create Category Mutation
   const createCategoryMutation = useMutation({
-    mutationFn: async (name) => {
+    mutationFn: async ({ name, parent_id }) => {
       const res = await fetch('http://localhost:3001/categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name })
+        body: JSON.stringify({ name, parent_id: parent_id ? parseInt(parent_id) : null })
       });
       if (!res.ok) throw new Error('Failed to create category');
       return res.json();
@@ -55,6 +78,7 @@ export default function Inventory() {
     onSuccess: () => {
       queryClient.invalidateQueries(['categories']);
       setNewCategoryName('');
+      setNewCategoryParent('');
       showToast('Category created');
     }
   });
@@ -75,17 +99,19 @@ export default function Inventory() {
       showToast('Asset created successfully');
       setIsCreateOpen(false);
       setProperties([]);
-      setCreateForm({ asset_tag: '', type: '', warehouse_id: 1, category_id: '' });
+      setCreateForm({ asset_tag: '', serial_number: '', type: '', warehouse_id: 1, category_id: '' });
     },
     onError: (err) => showToast(err.message, 'error')
   });
 
-  // Allocate Asset Mutation
   const allocateMutation = useMutation({
     mutationFn: async (data) => {
-      const res = await fetch('http://localhost:3001/allocate?strategy=redis', {
+      const res = await fetch('http://localhost:3000/allocate?strategy=redis', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
         body: JSON.stringify(data)
       });
       if (!res.ok) {
@@ -102,7 +128,26 @@ export default function Inventory() {
     onError: (err) => showToast(err.message, 'error')
   });
 
-  // Handle Excel Upload
+  const reportIssueMutation = useMutation({
+    mutationFn: async (data) => {
+      const res = await fetch(`http://localhost:3001/assets/${selectedAsset.id}/report-issue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('Failed to report issue');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['assets']);
+      showToast('Issue reported and maintenance ticket created');
+      setIsIssueOpen(false);
+      setSelectedAsset(null);
+      setIssueForm({ issue_type: '', description: '' });
+    },
+    onError: (err) => showToast(err.message, 'error')
+  });
+
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -113,10 +158,7 @@ export default function Inventory() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       showToast(`Imported ${data.success} assets.`);
-      if (data.errors && data.errors.length > 0) {
-        // Simple way to show errors; you could render this in the UI
-        alert('Some rows failed:\n' + data.errors.join('\n'));
-      }
+      if (data.errors && data.errors.length > 0) alert('Some rows failed:\n' + data.errors.join('\n'));
       queryClient.invalidateQueries(['assets']);
     } catch (err) {
       showToast(err.message, 'error');
@@ -124,39 +166,30 @@ export default function Inventory() {
     e.target.value = ''; // reset
   };
 
-  const filteredAssets = assets?.filter(a => statusFilter ? a.status === statusFilter : true);
+  const getCategoryName = (id) => categories?.find(c => c.id === id)?.name || '-';
 
   return (
     <div className="flex gap-6 h-full">
       {/* Sidebar (Categories) */}
       <div className="w-64 flex-shrink-0 flex flex-col gap-4">
         <h2 className="font-semibold text-lg">Categories</h2>
-        <div className="flex gap-2">
-          <input 
-            type="text" 
-            placeholder="New Category"
-            className="w-full border border-border rounded-md px-2 py-1.5 text-sm focus:border-primary"
-            value={newCategoryName}
-            onChange={e => setNewCategoryName(e.target.value)}
-          />
-          <Button variant="outline" size="sm" onClick={() => { if(newCategoryName) createCategoryMutation.mutate(newCategoryName) }}>
-            <Plus size={16} />
+        <div className="border border-border p-3 rounded-md space-y-2 bg-background text-sm">
+          <input type="text" placeholder="New Category Name" className="w-full border border-border rounded-md px-2 py-1.5 focus:border-primary" value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} />
+          <select className="w-full border border-border rounded-md px-2 py-1.5 focus:border-primary" value={newCategoryParent} onChange={e => setNewCategoryParent(e.target.value)}>
+            <option value="">No Parent (Root)</option>
+            {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <Button variant="secondary" size="sm" className="w-full" onClick={() => { if(newCategoryName) createCategoryMutation.mutate({ name: newCategoryName, parent_id: newCategoryParent }) }}>
+            <Plus size={16} className="mr-1" /> Add Category
           </Button>
         </div>
         <div className="flex flex-col gap-1 mt-2">
-          <button 
-            className={`text-left px-3 py-2 rounded-md text-sm transition-colors ${categoryFilter === '' ? 'bg-primary text-white' : 'text-muted hover:bg-surface hover:text-text'}`}
-            onClick={() => setCategoryFilter('')}
-          >
+          <button className={`text-left px-3 py-2 rounded-md text-sm transition-colors ${categoryFilter === '' ? 'bg-primary text-white' : 'text-muted hover:bg-surface hover:text-text'}`} onClick={() => { setCursor(null); setCategoryFilter(''); }}>
             All Categories
           </button>
           {categories?.map(c => (
-            <button 
-              key={c.id}
-              className={`text-left px-3 py-2 rounded-md text-sm transition-colors ${categoryFilter === c.id.toString() ? 'bg-primary text-white' : 'text-muted hover:bg-surface hover:text-text'}`}
-              onClick={() => setCategoryFilter(c.id.toString())}
-            >
-              {c.name}
+            <button key={c.id} className={`text-left px-3 py-2 rounded-md text-sm transition-colors ${categoryFilter === c.id.toString() ? 'bg-primary text-white' : 'text-muted hover:bg-surface hover:text-text'}`} onClick={() => { setCursor(null); setCategoryFilter(c.id.toString()); }}>
+              {c.parent_id ? '— ' : ''}{c.name}
             </button>
           ))}
         </div>
@@ -167,39 +200,48 @@ export default function Inventory() {
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-semibold">Asset Inventory</h1>
           <div className="flex gap-2">
-            <input type="file" id="import-excel" className="hidden" accept=".xlsx" onChange={handleFileUpload} />
-            <Button variant="outline" onClick={() => document.getElementById('import-excel').click()}>
-              <Upload size={16} className="mr-2" /> Import
-            </Button>
-            <a href="http://localhost:3001/assets/export" download>
-              <Button variant="outline">
-                <Download size={16} className="mr-2" /> Export
-              </Button>
-            </a>
-            <Button onClick={() => setIsCreateOpen(true)}>Create Asset</Button>
-            <Button variant="outline" onClick={() => setIsAllocateOpen(true)}>Allocate Asset</Button>
+            {role === 'ADMIN' && (
+              <>
+                <input type="file" id="import-excel" className="hidden" accept=".xlsx" onChange={handleFileUpload} />
+                <Button variant="outline" onClick={() => document.getElementById('import-excel').click()}><Upload size={16} className="mr-2" /> Import</Button>
+                <a href="http://localhost:3001/assets/export" download>
+                  <Button variant="outline"><Download size={16} className="mr-2" /> Export</Button>
+                </a>
+                <Button onClick={() => setIsCreateOpen(true)}>Create Asset</Button>
+                <Button variant="outline" onClick={() => setIsAllocateOpen(true)}>Allocate Asset</Button>
+              </>
+            )}
           </div>
         </div>
 
         <div className="flex gap-4 items-center">
           <input 
             type="text" 
-            placeholder="Search tags or types..."
+            placeholder="Search tags, type, serial..."
             className="border border-border rounded-md px-3 py-2 text-sm w-64 focus:border-primary"
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => { setCursor(null); setSearch(e.target.value); }}
           />
-          <div className="flex gap-2">
-            {['', 'IN_STOCK', 'DEPLOYED', 'MAINTENANCE'].map(status => (
-              <button 
-                key={status}
-                onClick={() => setStatusFilter(status)}
-                className={`px-3 py-1 rounded-full text-xs font-medium border ${statusFilter === status ? 'bg-primary text-white border-primary' : 'bg-surface text-muted border-border hover:text-text'}`}
-              >
-                {status || 'ALL'}
-              </button>
-            ))}
-          </div>
+        </div>
+
+        {/* Status Filter Chips */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          {['IN_STOCK', 'DEPLOYED', 'MAINTENANCE', 'RETIRED'].map(status => (
+            <button
+              key={status}
+              onClick={() => {
+                setCursor(null);
+                setStatusFilter(prev => {
+                  const current = prev ? prev.split(',') : [];
+                  if (current.includes(status)) return current.filter(s => s !== status).join(',');
+                  return [...current, status].join(',');
+                });
+              }}
+              className={`px-3 py-1 rounded-full text-xs ${statusFilter.includes(status) ? 'bg-primary text-white' : 'bg-surface border border-border text-muted'}`}
+            >
+              {status}
+            </button>
+          ))}
         </div>
 
         <div className="bg-background border border-border rounded-lg overflow-hidden">
@@ -207,109 +249,103 @@ export default function Inventory() {
             <thead className="bg-surface border-b border-border text-muted">
               <tr>
                 <th className="px-6 py-4 font-medium">Asset Tag</th>
-                <th className="px-6 py-4 font-medium">Type</th>
+                <th className="px-6 py-4 font-medium">Serial Number</th>
                 <th className="px-6 py-4 font-medium">Category</th>
                 <th className="px-6 py-4 font-medium">Status</th>
-                <th className="px-6 py-4 font-medium">Assigned To</th>
+                {role === 'ADMIN' && <th className="px-6 py-4 font-medium text-right">Actions</th>}
               </tr>
             </thead>
             <tbody>
-              {isLoading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i} className="border-b border-border">
-                    <td colSpan="5" className="px-6 py-4"><div className="h-4 bg-surface animate-pulse rounded w-full" /></td>
-                  </tr>
-                ))
-              ) : filteredAssets?.length === 0 ? (
-                <tr>
-                  <td colSpan="5" className="px-6 py-8 text-center text-muted">No assets found.</td>
-                </tr>
+              {isLoading && !cursor ? (
+                <tr><td colSpan="5" className="px-6 py-8 text-center text-muted">Loading...</td></tr>
+              ) : !Array.isArray(assets) || assets.length === 0 ? (
+                <tr><td colSpan="5" className="px-6 py-8 text-center text-muted">No assets found.</td></tr>
               ) : (
-                filteredAssets?.map(asset => (
-                  <tr key={asset.id} className="border-b border-border last:border-0 hover:bg-surface/50">
+                assets.map(asset => (
+                  <tr key={asset.id} className="border-b border-border last:border-0 hover:bg-surface/50 group">
                     <td className="px-6 py-4 font-mono">{asset.asset_tag}</td>
-                    <td className="px-6 py-4">{asset.type}</td>
-                    <td className="px-6 py-4">{categories?.find(c => c.id === asset.category_id)?.name || '-'}</td>
+                    <td className="px-6 py-4 font-mono">{asset.serial_number || '-'}</td>
+                    <td className="px-6 py-4">{getCategoryName(asset.category_id)}</td>
                     <td className="px-6 py-4"><StatusBadge status={asset.status} /></td>
-                    <td className="px-6 py-4">{asset.assigned_to || '-'}</td>
+                    {role === 'ADMIN' && (
+                      <td className="px-6 py-4 text-right">
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                          {asset.status !== 'MAINTENANCE' && (
+                            <button 
+                              onClick={() => { setSelectedAsset(asset); setIsIssueOpen(true); }}
+                              className="text-amber-500 hover:text-amber-600 px-2 flex items-center gap-1 inline-flex"
+                              title="Report Issue"
+                            >
+                              <AlertTriangle size={16} /> Report
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
             </tbody>
           </table>
+          
+          {hasNextPage && (
+            <div className="p-4 border-t border-border flex justify-center bg-surface/50">
+              <Button variant="secondary" onClick={() => setCursor(data.nextCursor)}>Load More</Button>
+            </div>
+          )}
         </div>
 
         {/* Allocate Modal */}
         <Modal isOpen={isAllocateOpen} onClose={() => setIsAllocateOpen(false)} title="Allocate Asset">
           <form onSubmit={(e) => { e.preventDefault(); allocateMutation.mutate(allocateForm); }} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-text mb-1">Asset Type</label>
-              <input 
-                type="text" 
-                className="w-full border border-border rounded-md px-3 py-2 text-sm focus:border-primary"
-                value={allocateForm.assetType}
-                onChange={e => setAllocateForm({...allocateForm, assetType: e.target.value})}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text mb-1">Assign To (User ID)</label>
-              <input 
-                type="number" 
-                className="w-full border border-border rounded-md px-3 py-2 text-sm focus:border-primary"
-                value={allocateForm.assignedTo}
-                onChange={e => setAllocateForm({...allocateForm, assignedTo: parseInt(e.target.value)})}
-              />
-            </div>
-            <Button type="submit" className="w-full" disabled={allocateMutation.isPending}>
-              {allocateMutation.isPending ? 'Allocating...' : 'Allocate'}
-            </Button>
+            <div><label className="block text-sm mb-1">Asset Type</label><input type="text" className="w-full border rounded-md px-3 py-2 text-sm" value={allocateForm.assetType} onChange={e => setAllocateForm({...allocateForm, assetType: e.target.value})} /></div>
+            <div><label className="block text-sm mb-1">Assign To (User ID)</label><input type="number" className="w-full border rounded-md px-3 py-2 text-sm" value={allocateForm.assignedTo} onChange={e => setAllocateForm({...allocateForm, assignedTo: parseInt(e.target.value)})} /></div>
+            <Button type="submit" className="w-full" disabled={allocateMutation.isPending}>Allocate</Button>
           </form>
         </Modal>
 
         {/* Create Asset Modal */}
         <Modal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} title="Create Asset">
-          <form onSubmit={(e) => { 
-            e.preventDefault(); 
-            createAssetMutation.mutate({ ...createForm, category_id: createForm.category_id ? parseInt(createForm.category_id) : null, properties }); 
-          }} className="space-y-4">
+          <form onSubmit={(e) => { e.preventDefault(); createAssetMutation.mutate({ ...createForm, category_id: createForm.category_id ? parseInt(createForm.category_id) : null, properties }); }} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-text mb-1">Asset Tag</label>
-                <input required type="text" className="w-full border border-border rounded-md px-3 py-2 text-sm focus:border-primary" value={createForm.asset_tag} onChange={e => setCreateForm({...createForm, asset_tag: e.target.value})} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-text mb-1">Type</label>
-                <input required type="text" className="w-full border border-border rounded-md px-3 py-2 text-sm focus:border-primary" value={createForm.type} onChange={e => setCreateForm({...createForm, type: e.target.value})} />
-              </div>
+              <div><label className="block text-sm mb-1">Asset Tag</label><input required className="w-full border rounded-md px-3 py-2 text-sm" value={createForm.asset_tag} onChange={e => setCreateForm({...createForm, asset_tag: e.target.value})} /></div>
+              <div><label className="block text-sm mb-1">Serial Number</label><input className="w-full border rounded-md px-3 py-2 text-sm" value={createForm.serial_number} onChange={e => setCreateForm({...createForm, serial_number: e.target.value})} /></div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-text mb-1">Category</label>
-              <select className="w-full border border-border rounded-md px-3 py-2 text-sm focus:border-primary" value={createForm.category_id} onChange={e => setCreateForm({...createForm, category_id: e.target.value})}>
-                <option value="">None</option>
-                {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+            <div className="grid grid-cols-2 gap-4">
+              <div><label className="block text-sm mb-1">Type</label><input required className="w-full border rounded-md px-3 py-2 text-sm" value={createForm.type} onChange={e => setCreateForm({...createForm, type: e.target.value})} /></div>
+              <div><label className="block text-sm mb-1">Category</label><select className="w-full border rounded-md px-3 py-2 text-sm" value={createForm.category_id} onChange={e => setCreateForm({...createForm, category_id: e.target.value})}><option value="">None</option>{categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
             </div>
             
             {/* Dynamic Properties */}
             <div>
-              <label className="block text-sm font-medium text-text mb-2">Dynamic Properties (JSONB)</label>
+              <label className="block text-sm mb-2">Dynamic Properties (JSONB)</label>
               <div className="space-y-2 mb-2">
                 {properties.map((p, i) => (
                   <div key={i} className="flex gap-2">
-                    <input type="text" placeholder="Key" className="flex-1 border border-border rounded-md px-3 py-1.5 text-sm" value={p.key} onChange={e => { const newP = [...properties]; newP[i].key = e.target.value; setProperties(newP); }} />
-                    <input type="text" placeholder="Value" className="flex-1 border border-border rounded-md px-3 py-1.5 text-sm" value={p.value} onChange={e => { const newP = [...properties]; newP[i].value = e.target.value; setProperties(newP); }} />
+                    <input placeholder="Key" className="flex-1 border rounded-md px-3 py-1.5 text-sm" value={p.key} onChange={e => { const newP = [...properties]; newP[i].key = e.target.value; setProperties(newP); }} />
+                    <input placeholder="Value" className="flex-1 border rounded-md px-3 py-1.5 text-sm" value={p.value} onChange={e => { const newP = [...properties]; newP[i].value = e.target.value; setProperties(newP); }} />
                     <button type="button" onClick={() => setProperties(properties.filter((_, idx) => idx !== i))} className="text-red-500 p-1"><X size={16} /></button>
                   </div>
                 ))}
               </div>
               <Button type="button" variant="outline" size="sm" onClick={() => setProperties([...properties, {key: '', value: ''}])}>+ Add Field</Button>
             </div>
-
-            <Button type="submit" className="w-full" disabled={createAssetMutation.isPending}>
-              {createAssetMutation.isPending ? 'Creating...' : 'Create Asset'}
-            </Button>
+            <Button type="submit" className="w-full" disabled={createAssetMutation.isPending}>Create Asset</Button>
           </form>
         </Modal>
+
+        {/* Report Issue Modal */}
+        <Modal isOpen={isIssueOpen} onClose={() => setIsIssueOpen(false)} title="Report Issue">
+          {selectedAsset && (
+            <form onSubmit={(e) => { e.preventDefault(); reportIssueMutation.mutate(issueForm); }} className="space-y-4">
+              <p className="text-sm text-muted">Reporting issue for asset <span className="font-mono text-text">{selectedAsset.asset_tag}</span>.</p>
+              <div><label className="block text-sm mb-1">Issue Type</label><input required placeholder="e.g. Broken screen" className="w-full border rounded-md px-3 py-2 text-sm" value={issueForm.issue_type} onChange={e => setIssueForm({...issueForm, issue_type: e.target.value})} /></div>
+              <div><label className="block text-sm mb-1">Description</label><textarea required className="w-full border rounded-md px-3 py-2 text-sm" rows="3" value={issueForm.description} onChange={e => setIssueForm({...issueForm, description: e.target.value})} /></div>
+              <Button type="submit" className="w-full" disabled={reportIssueMutation.isPending}>Submit Report</Button>
+            </form>
+          )}
+        </Modal>
+
       </div>
     </div>
   );

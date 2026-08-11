@@ -28,6 +28,7 @@ model PurchaseOrder {
   department        String?
   billing_address   String?
   delivery_address  String?
+  receiving_office  String?
   custom_attributes Json?
   created_at        DateTime  @default(now())
 }
@@ -39,4 +40,22 @@ model AuditLog {
   payload_json       Json
   processed_event_id String   @unique
   created_at         DateTime @default(now())
+}
+
+model OutboxEvent {
+  id           Int      @id @default(autoincrement())
+  event_type   String
+  payload_json Json
+  published    Boolean  @default(false)
+  created_at   DateTime @default(now())
+}
+
+model DashboardSummary {
+  id                     Int      @id @default(1)
+  total_assets           Int      @default(0)
+  total_maintenance_cost Float    @default(0.0)
+  active_issues          Int      @default(0)
+  in_stock_assets        Int      @default(0)
+  out_of_stock_assets    Int      @default(0)
+  updated_at             DateTime @updatedAt
 }

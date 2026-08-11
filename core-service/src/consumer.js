@@ -41,17 +41,39 @@ async function processMessage(message) {
     if (!exists) {
       const payload = JSON.parse(data.payload);
       
-      await prisma.auditLog.create({
-        data: {
-          event_type: data.event_type,
-          entity_id: payload.assetId || 0,
-          payload_json: payload,
-          processed_event_id: processedEventId
+      await prisma.$transaction(async (tx) => {
+        await tx.auditLog.create({
+          data: {
+            event_type: data.event_type,
+            entity_id: payload.assetId || payload.poId || 0,
+            payload_json: payload,
+            processed_event_id: processedEventId
+          }
+        });
+
+        // CQRS: Update DashboardSummary
+        let updateData = {};
+        if (data.event_type === 'ASSET_ALLOCATED') {
+          updateData = { in_stock_assets: { decrement: 1 }, out_of_stock_assets: { increment: 1 } };
+        } else if (data.event_type === 'TICKET_CREATED') {
+          updateData = { active_issues: { increment: 1 } };
+        } else if (data.event_type === 'TICKET_RESOLVED') {
+          updateData = { active_issues: { decrement: 1 }, total_maintenance_cost: { increment: payload.cost || 0 } };
+        } else if (data.event_type === 'ASSET_CREATED') {
+          updateData = { total_assets: { increment: 1 }, in_stock_assets: { increment: 1 } };
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          await tx.dashboardSummary.upsert({
+            where: { id: 1 },
+            update: updateData,
+            create: { id: 1, ...Object.fromEntries(Object.keys(updateData).map(k => [k, updateData[k].increment || updateData[k].decrement * -1 || 0])) }
+          });
         }
       });
-      console.log(`Processed and saved audit log for event ${processedEventId}`);
+      console.log(`[req:${payload.request_id || 'system'}] Processed and saved audit log & CQRS for event ${processedEventId}`);
     } else {
-      console.log(`Skipped duplicate event ${processedEventId}`);
+      console.log(`[req:${JSON.parse(data.payload).request_id || 'system'}] Skipped duplicate event ${processedEventId}`);
     }
 
     // Acknowledge the message so it is removed from the pending entries list

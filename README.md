@@ -41,11 +41,17 @@ A MERN-stack IT Asset & Warehouse Management System built to demonstrate real di
 │  Frontend   │                     │  (Auth, Procurement,│
 └─────────────┘                     │   Gateway routes)   │
                                      └─────────┬──────────┘
-                                               │ REST (allocate asset)
+                                               │ REST proxy via Opossum
+                                               │ Circuit Breaker
+                                               ▼
+                                     ┌──────────────────────┐
+                                     │ Nginx Load Balancer  │
+                                     └─────────┬────────────┘
+                                               │ Round-robin
                                                ▼
                                      ┌──────────────────────┐
                                      │ Inventory & Allocation │
-                                     │      Microservice      │
+                                     │  (3 Docker Replicas) │
                                      └─────────┬──────────────┘
                                                │
                         ┌──────────────────────┼───────────────────┐
@@ -55,7 +61,7 @@ A MERN-stack IT Asset & Warehouse Management System built to demonstrate real di
                                                                     │
                                                                     ▼
                                                         Core Service consumes
-                                                        stream → writes audit log
+                                                        stream → CQRS updates
 ```
 
 Two services only, as scoped:
@@ -103,6 +109,9 @@ Fix — **transactional outbox**:
 3. Core Service's consumer reads the stream (consumer group `audit-log-group`) and writes to `audit_log`, using the event's unique ID to stay idempotent on redelivery.
 
 This single pattern is worth more in an interview than the entire Kafka mention in the original draft — it shows you understand *why* naive pub/sub is unsafe.
+
+### The Saga Pattern (Distributed Transactions)
+When a Purchase Order is rejected in `core-service`, a `PO_REJECTED` event is relayed via the outbox into the Redis Stream. The `inventory-service` consumer listens to this stream and automatically executes a compensating transaction to revert all assigned assets back to `CANCELLED`, effectively rolling back the distributed state without requiring a complex 2PC (Two-Phase Commit).
 
 ---
 
@@ -190,11 +199,15 @@ cd frontend && npm run dev
 
 ## 12. Interview Talking Points This Project Proves
 
-- Pessimistic vs optimistic concurrency control, with real benchmark data
-- Dual-write problem and the outbox pattern
-- Idempotent API design
-- Database-per-service boundary
-- Honest scoping: why Redis Streams was chosen over Kafka at this scale, and what would change at higher throughput
+- Pessimistic vs optimistic concurrency control, with real benchmark data confirming zero overselling on a horizontally scaled 3-node cluster.
+- Dual-write problem and the Transactional Outbox pattern.
+- Event-Driven Saga Pattern (Compensating Transactions) across service boundaries.
+- CQRS (Command Query Responsibility Segregation) for aggregation-free real-time dashboard statistics.
+- Circuit Breakers (`opossum`) for inter-service resilience and Rate Limiting for API protection.
+- Distributed Tracing (`X-Request-ID`) propagation from HTTP headers into asynchronous message queues.
+- Idempotent API design.
+- Database-per-service boundary.
+- Honest scoping: why Redis Streams was chosen over Kafka at this scale, and what would change at higher throughput.
 
 ---
 
@@ -204,3 +217,16 @@ cd frontend && npm run dev
 - Real Redlock (multi-node) if locks need to survive single-node Redis failure
 - Full API Gateway with circuit breakers (`opossum`) if service count grows beyond 2
 - OpenTelemetry tracing across service boundaries
+
+---
+
+## 14. Explicit Consistency Model (CAP Theorem Trade-offs)
+
+In a distributed environment, we must explicitly choose between Consistency and Availability under Partition (CAP). This system implements a hybrid approach depending on the domain boundary:
+
+- **CP (Consistent & Partition Tolerant) — Asset Allocation**:
+  The core inventory allocation (`POST /allocate`) must NEVER oversell. We trade availability for strict consistency. If the Redis lock/counter is unreachable, or the Postgres DB is partitioned, the request fails (503/500). We guarantee strongly consistent reads and writes here using pessimistic locking (`FOR UPDATE SKIP LOCKED`) and atomic Redis counters.
+
+- **AP (Available & Partition Tolerant) — Dashboard & Audit Logs**:
+  The `GET /dashboard/stats` CQRS read model and the Audit Logs are eventually consistent. When a Purchase Order is approved, the UI immediately returns success (Availability). The Outbox Relay and Redis Streams consumer run asynchronously to update the read models. 
+  *Maximum Staleness*: Typically < 50ms under normal load, bounded by the Outbox polling interval. If the stream consumer crashes, the system remains fully available for writes, and the read model simply falls behind until the consumer recovers and processes the pending queue.

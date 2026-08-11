@@ -4,14 +4,48 @@ const Redis = require('ioredis');
 const cors = require('cors');
 const multer = require('multer');
 const ExcelJS = require('exceljs');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const helmet = require('helmet');
+const pino = require('pino');
+const pinoHttp = require('pino-http');
+const swaggerUi = require('swagger-ui-express');
+const crypto = require('crypto');
+const { z } = require('zod');
+const { generateSpec } = require('./swagger');
+require('dotenv').config({ path: '../.env' }); // Load from root
+
+const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: { folder: 'it_wms_bills' },
+});
+
 const upload = multer({ dest: 'uploads/' });
+const cloudUpload = multer({ storage: storage });
 
 const app = express();
 const prisma = new PrismaClient();
 const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
 app.use(express.json());
+app.use(helmet());
 app.use(cors());
+
+app.use((req, res, next) => {
+  req.id = req.headers['x-request-id'] || crypto.randomUUID();
+  res.setHeader('X-Request-ID', req.id);
+  next();
+});
+
+app.use(pinoHttp({ logger, genReqId: req => req.id }));
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(generateSpec()));
 
 // --- System ---
 app.get('/health', async (req, res) => {
@@ -58,63 +92,67 @@ app.delete('/categories/:id', async (req, res) => {
   res.json({ success: true });
 });
 
-// --- Dashboard ---
-app.get('/dashboard/stats', async (req, res) => {
-  const totalAssets = await prisma.asset.count();
-  const inStock = await prisma.asset.count({ where: { status: 'IN_STOCK' } });
-  const outOfStock = totalAssets - inStock;
-  
-  const categoryGroups = await prisma.asset.groupBy({
-    by: ['category_id'],
-    _count: { _all: true }
-  });
-  
-  const openTickets = await prisma.maintenanceTicket.count({ where: { status: 'OPEN' } });
-  
-  const costAgg = await prisma.maintenanceTicket.aggregate({
-    _sum: { cost: true }
-  });
-
-  res.json({
-    totalAssets,
-    inStock,
-    outOfStock,
-    assetsByCategory: categoryGroups,
-    openMaintenance: openTickets,
-    totalMaintenanceCost: costAgg._sum.cost || 0
-  });
-});
+// Removed /dashboard/stats to enforce CQRS in core-service
 
 // Get all assets
 app.get('/assets', async (req, res) => {
   try {
-    const { category_id, search } = req.query;
+    const { category_id, search, status, cursor, limit = 50 } = req.query;
     const where = {};
     if (category_id) where.category_id = parseInt(category_id);
+    
+    if (status) {
+      where.status = { in: status.split(',') };
+    }
+
     if (search) {
       where.OR = [
         { asset_tag: { contains: search, mode: 'insensitive' } },
-        { type: { contains: search, mode: 'insensitive' } }
+        { type: { contains: search, mode: 'insensitive' } },
+        { serial_number: { contains: search, mode: 'insensitive' } }
       ];
     }
 
-    const assets = await prisma.asset.findMany({
+    const query = {
       where,
+      take: Number(limit) + 1,
       orderBy: { created_at: 'desc' }
-    });
-    res.json(assets);
+    };
+    
+    if (cursor) {
+      query.cursor = { id: parseInt(cursor, 10) };
+    }
+
+    const assets = await prisma.asset.findMany(query);
+    let nextCursor = null;
+    if (assets.length > limit) {
+      nextCursor = assets.pop().id;
+    }
+    
+    res.json({ data: assets, nextCursor });
   } catch (error) {
-    console.error(error);
+    req.log.error(error);
     res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+const CreateAssetSchema = z.object({
+  asset_tag: z.string().min(1),
+  serial_number: z.string().optional(),
+  type: z.string().min(1),
+  status: z.string().optional(),
+  warehouse_id: z.number().int().optional(),
+  category_id: z.number().int().optional(),
+  po_id: z.number().int().optional(),
+  properties: z.array(z.object({ key: z.string(), value: z.string() })).optional()
 });
 
 // Create asset
 app.post('/assets', async (req, res) => {
   try {
-    const { asset_tag, type, status, warehouse_id, category_id, properties } = req.body;
+    const parsed = CreateAssetSchema.parse(req.body);
+    const { asset_tag, serial_number, type, status, warehouse_id, category_id, po_id, properties } = parsed;
     
-    // Merge properties array into jsonb object
     const jsonb_attributes = properties ? properties.reduce((acc, curr) => {
       acc[curr.key] = curr.value;
       return acc;
@@ -122,15 +160,35 @@ app.post('/assets', async (req, res) => {
 
     const asset = await prisma.asset.create({
       data: {
-        asset_tag,
-        type,
+        asset_tag, serial_number, type,
         status: status || 'IN_STOCK',
-        warehouse_id,
-        category_id,
-        jsonb_attributes
+        warehouse_id, category_id, po_id, jsonb_attributes
       }
     });
-    res.json(asset);
+    res.status(201).json(asset);
+  } catch (error) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+    req.log.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/assets/:id/report-issue', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { issue_type, description } = req.body;
+    
+    const result = await prisma.$transaction(async (tx) => {
+      const ticket = await tx.maintenanceTicket.create({
+        data: { asset_id: id, issue_type, description, status: 'OPEN' }
+      });
+      const asset = await tx.asset.update({
+        where: { id },
+        data: { status: 'MAINTENANCE' }
+      });
+      return { ticket, asset };
+    });
+    res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -223,21 +281,66 @@ app.get('/maintenance', async (req, res) => {
 app.patch('/maintenance/:id/resolve', async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { cost } = req.body;
+    const { cost, parts_used, status: nextStatus } = req.body;
 
     const result = await prisma.$transaction(async (tx) => {
       const ticket = await tx.maintenanceTicket.update({
         where: { id },
-        data: { status: 'CLOSED', resolved_at: new Date(), cost }
+        data: { 
+          status: nextStatus || 'CLOSED', 
+          resolved_at: (!nextStatus || nextStatus === 'CLOSED') ? new Date() : null, 
+          cost,
+          parts_used: parts_used || []
+        }
       });
-      await tx.asset.update({
-        where: { id: ticket.asset_id },
-        data: { status: 'IN_STOCK' }
-      });
+      if (!nextStatus || nextStatus === 'CLOSED') {
+        await tx.asset.update({
+          where: { id: ticket.asset_id },
+          data: { status: 'IN_STOCK' }
+        });
+      }
       return ticket;
     });
     res.json(result);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/maintenance/:id/bill', cloudUpload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const id = parseInt(req.params.id);
+    
+    const ticket = await prisma.maintenanceTicket.update({
+      where: { id },
+      data: { bill_url: req.file.path }
+    });
+    res.json(ticket);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/maintenance/stats', async (req, res) => {
+  try {
+    const { range } = req.query; // weekly, monthly, yearly
+    let format = 'YYYY-MM'; // default monthly
+    if (range === 'weekly') format = 'YYYY-WW';
+    if (range === 'yearly') format = 'YYYY';
+
+    // Using raw SQL for date_trunc
+    const truncStr = range === 'yearly' ? 'year' : range === 'weekly' ? 'week' : 'month';
+    const stats = await prisma.$queryRawUnsafe(`
+      SELECT date_trunc($1, created_at) as period, SUM(cost) as total_cost 
+      FROM "MaintenanceTicket" 
+      WHERE cost IS NOT NULL 
+      GROUP BY period 
+      ORDER BY period ASC
+    `, truncStr);
+
+    res.json(stats);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Seed endpoint for testing
@@ -311,7 +414,8 @@ app.post('/allocate', async (req, res) => {
               assetId: asset.id,
               assetTag: asset.asset_tag,
               assignedTo: asset.assigned_to,
-              strategy: 'redis'
+              strategy: 'redis',
+              request_id: req.id
             }
           }
         });
@@ -353,7 +457,8 @@ app.post('/allocate', async (req, res) => {
               assetId: updatedAsset.id,
               assetTag: updatedAsset.asset_tag,
               assignedTo: updatedAsset.assigned_to,
-              strategy: 'postgres'
+              strategy: 'postgres',
+              request_id: req.id
             }
           }
         });
@@ -374,5 +479,5 @@ app.post('/allocate', async (req, res) => {
 
 const port = process.env.PORT || 3001;
 app.listen(port, () => {
-  console.log(`Inventory service listening on port ${port}`);
+  logger.info(`Inventory service listening on port ${port}`);
 });

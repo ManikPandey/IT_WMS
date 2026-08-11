@@ -7,15 +7,20 @@ This is a living document tracking the phases of development and the evolving ar
 ```mermaid
 graph TD
     UI[React Frontend <br/> Vite + Tailwind + TanStack Query] -->|REST / JWT| CORE[Core Service <br/> Node + Express + Prisma]
-    UI -->|REST| INV[Inventory Service <br/> Node + Express + Prisma]
+    UI -->|REST| NGINX[Nginx Load Balancer]
+    NGINX -->|Proxy /allocate| INV[Inventory Service <br/> 3 Replicas]
     
-    CORE -->|Reads/Writes| CORE_DB[(Core DB Postgres <br/> Users, POs, Audit)]
+    CORE -->|REST proxy via <br/> Opossum Circuit Breaker| NGINX
+    
+    CORE -->|Reads/Writes| CORE_DB[(Core DB Postgres <br/> Users, POs, Audit, CQRS Dashboard)]
     INV -->|Reads/Writes| INV_DB[(Inventory DB Postgres <br/> Assets, Categories, Tickets, Outbox)]
     
     INV -->|Option B: Decr Counter| REDIS[(Redis <br/> Concurrency Control)]
     INV -->|Publishes Events via Outbox| STREAMS[Redis Streams <br/> asset-events]
     
     STREAMS -->|Consumed via XREADGROUP| CORE
+    
+    CORE -.->|Updates| CQRS[(Dashboard Summary <br/> CQRS Read Model)]
 ```
 
 ---
@@ -58,6 +63,23 @@ graph TD
 - Upgraded the **Inventory** page with a 2-column layout for Category management, advanced filters, and a dynamic Create Asset modal.
 - Built a dedicated **Maintenance** page with filtering tabs and a resolution workflow.
 - Reorganized **Settings** to encapsulate Audit Logs, User Management (Admin-only), and a 1-click System Data Export button.
+
+### Phase 5.6a: Advanced Data & Logic
+- **Inventory Service**: Promoted `serial_number` to an indexed column. Refined asset search to match `asset_tag`, `name`, and `serial_number`. Expanded Asset state machine with `RETIRED` state. Added `parts_used` and `bill_url` to maintenance tickets with Cloudinary file upload integration.
+- **Core Service**: Added detailed properties and specific rejection workflows for Purchase Orders, triggering cross-service compensation.
+
+### Phase 5.6b: UI, Charts & Role-Based Views
+- Built dynamic dashboard with `recharts` for top categories, stock availability, and procurement spend.
+- Upgraded the Inventory table with global search and column filters, plus a "Report Issue" flow.
+- Added role-based conditional rendering so maintenance crews only see relevant views.
+
+### Phase 5.6c: System Design Hardening (Industry-Ready)
+- **CQRS Read Model**: Implemented `dashboard_summary` table in core-service updated via Redis Stream consumer for live aggregation-free stats.
+- **Rate Limiting**: Added Redis-backed token bucket middleware at `core-service` entry per user.
+- **Circuit Breaker**: Wrapped inter-service REST calls from `core-service` to `inventory-service` with `opossum` to prevent cascading failures.
+- **Saga Pattern**: Implemented a compensating transaction workflow where a `PO_REJECTED` event from core-service reliably reverts procured assets back to `CANCELLED` in inventory-service.
+- **Distributed Tracing**: Enforced `X-Request-ID` propagation across HTTP headers and Redis Stream payloads for correlated logging.
+- **Horizontal Scaling Verification**: Dockerized all components and deployed a 3-replica load-balanced `inventory-service` using Nginx. Verified CP-guarantee with a 100-concurrent request load test confirming absolutely zero overselling.
 
 ---
 

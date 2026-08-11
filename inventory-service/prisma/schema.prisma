@@ -10,14 +10,18 @@ datasource db {
 model Asset {
   id               Int      @id @default(autoincrement())
   asset_tag        String   @unique
+  serial_number    String?  @unique
   type             String
   status           String
   jsonb_attributes Json?
   assigned_to      Int?
   warehouse_id     Int
   category_id      Int?
+  po_id            Int?
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt
+
+  @@index([serial_number])
 }
 
 model Category {
@@ -31,7 +35,9 @@ model MaintenanceTicket {
   asset_id    Int
   issue_type  String
   description String
-  status      String    @default("OPEN") // OPEN, CLOSED
+  status      String    @default("OPEN") // OPEN, RUNNING, CLOSED
+  parts_used  String[]
+  bill_url    String?
   cost        Float?
   created_at  DateTime  @default(now())
   resolved_at DateTime?

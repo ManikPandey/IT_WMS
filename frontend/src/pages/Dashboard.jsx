@@ -1,26 +1,43 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { StatCard } from '../components/ui';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { Activity } from 'lucide-react';
+import { StatCard, Button } from '../components/ui';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area } from 'recharts';
+import { Activity, Plus, Upload, FileText } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const COLORS = ['#6366f1', '#a5b4fc', '#4338ca', '#3730a3', '#818cf8'];
 
 export default function Dashboard() {
   const token = localStorage.getItem('token');
+  const role = localStorage.getItem('role');
+  const navigate = useNavigate();
+  const [range, setRange] = useState('monthly'); // weekly, monthly, yearly
 
   const { data: invStats, isLoading: invLoading } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: async () => {
-      const res = await fetch('http://localhost:3001/dashboard/stats');
+      const res = await fetch('http://localhost:3000/dashboard/stats', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      return res.json();
+    },
+    refetchInterval: 10000 // poll every 10s
+  });
+
+  const { data: procStats, isLoading: procLoading } = useQuery({
+    queryKey: ['procurement-stats', range],
+    queryFn: async () => {
+      const res = await fetch(`http://localhost:3000/procurement/stats?range=${range}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       return res.json();
     }
   });
 
-  const { data: procStats, isLoading: procLoading } = useQuery({
-    queryKey: ['procurement-stats'],
+  const { data: maintStats } = useQuery({
+    queryKey: ['maintenance-stats', range],
     queryFn: async () => {
-      const res = await fetch('http://localhost:3000/procurement/stats', {
+      const res = await fetch(`http://localhost:3000/maintenance/stats?range=${range}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       return res.json();
@@ -36,22 +53,24 @@ export default function Dashboard() {
     refetchInterval: 10000 // poll every 10s
   });
 
-  const assetsByCategoryData = invStats?.assetsByCategory?.map(item => ({
-    name: item.category_id ? `Category ${item.category_id}` : 'Uncategorized',
-    count: item._count._all
-  })) || [];
+  const assetsByCategoryData = []; // Removed for CQRS lite
 
   const stockData = [
-    { name: 'In Stock', value: invStats?.inStock || 0 },
-    { name: 'Out of Stock', value: invStats?.outOfStock || 0 }
+    { name: 'In Stock', value: invStats?.in_stock_assets || 0 },
+    { name: 'Out of Stock', value: invStats?.out_of_stock_assets || 0 }
   ];
 
   const spendData = procStats?.spendOverTime 
-    ? Object.keys(procStats.spendOverTime).map(month => ({
-        month,
-        spend: procStats.spendOverTime[month]
+    ? Object.keys(procStats.spendOverTime).map(period => ({
+        period,
+        spend: procStats.spendOverTime[period]
       }))
     : [];
+
+  const maintCostData = Array.isArray(maintStats) ? maintStats.map(row => ({
+    period: new Date(row.period).toISOString().slice(0, range === 'yearly' ? 4 : range === 'monthly' ? 7 : 10),
+    cost: row.total_cost
+  })) : [];
 
   return (
     <div className="space-y-8">
@@ -65,29 +84,25 @@ export default function Dashboard() {
         )}
       </div>
 
+      {role === 'ADMIN' && (
+        <div className="flex gap-4">
+          <Button onClick={() => navigate('/inventory')} variant="outline" className="flex-1 justify-center"><Upload size={16} className="mr-2"/> Import Data</Button>
+          <Button onClick={() => navigate('/purchase-orders')} variant="outline" className="flex-1 justify-center"><Plus size={16} className="mr-2"/> Create PO</Button>
+          <Button onClick={() => navigate('/inventory')} variant="outline" className="flex-1 justify-center"><Activity size={16} className="mr-2"/> Report Issue</Button>
+          <Button onClick={() => navigate('/settings')} variant="outline" className="flex-1 justify-center"><FileText size={16} className="mr-2"/> View Audit Logs</Button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Total Assets" value={invStats?.totalAssets || 0} isLoading={invLoading} />
-        <StatCard title="Active Issues" value={invStats?.openMaintenance || 0} isLoading={invLoading} />
-        <StatCard title="Total Maint. Cost" value={`$${(invStats?.totalMaintenanceCost || 0).toFixed(2)}`} isLoading={invLoading} />
-        <StatCard title="Total Spend" value={`$${spendData.reduce((a, b) => a + b.spend, 0).toFixed(2)}`} isLoading={procLoading} />
+        <StatCard title="Total Assets" value={invStats?.total_assets || 0} isLoading={invLoading} />
+        <StatCard title="Total Value (Spend)" value={`$${(Object.values(procStats?.spendOverTime || {}).reduce((a,b)=>a+b,0)).toFixed(2)}`} isLoading={procLoading} />
+        <StatCard title="Open Maintenance" value={invStats?.active_issues || 0} isLoading={invLoading} />
+        <StatCard title="System Health" value={health?.status === 'ok' ? 'Operational' : 'Degraded'} isLoading={!health} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Asset Distribution */}
-        <div className="bg-background border border-border rounded-lg p-6">
-          <h2 className="text-lg font-medium mb-4">Asset Distribution (By Category)</h2>
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={assetsByCategoryData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                <XAxis dataKey="name" tick={{fontSize: 12, fill: '#6b7280'}} axisLine={false} tickLine={false} />
-                <YAxis tick={{fontSize: 12, fill: '#6b7280'}} axisLine={false} tickLine={false} />
-                <Tooltip cursor={{fill: '#f3f4f6'}} contentStyle={{borderRadius: '6px', border: '1px solid #e5e7eb'}} />
-                <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+  
 
         {/* Stock Availability */}
         <div className="bg-background border border-border rounded-lg p-6">
@@ -109,17 +124,47 @@ export default function Dashboard() {
 
         {/* Procurement Spend */}
         <div className="bg-background border border-border rounded-lg p-6 lg:col-span-2">
-          <h2 className="text-lg font-medium mb-4">Procurement Spend</h2>
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={spendData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                <XAxis dataKey="month" tick={{fontSize: 12, fill: '#6b7280'}} axisLine={false} tickLine={false} />
-                <YAxis tick={{fontSize: 12, fill: '#6b7280'}} axisLine={false} tickLine={false} />
-                <Tooltip cursor={{stroke: '#e5e7eb', strokeWidth: 2}} contentStyle={{borderRadius: '6px', border: '1px solid #e5e7eb'}} />
-                <Line type="monotone" dataKey="spend" stroke="#4338ca" strokeWidth={2} dot={{r: 4, fill: '#4338ca'}} activeDot={{r: 6}} />
-              </LineChart>
-            </ResponsiveContainer>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-medium">Financial Trends</h2>
+            <div className="flex border border-border rounded-md overflow-hidden">
+              {['weekly', 'monthly', 'yearly'].map(r => (
+                <button 
+                  key={r}
+                  onClick={() => setRange(r)}
+                  className={`px-3 py-1 text-xs font-medium capitalize ${range === r ? 'bg-primary text-white' : 'bg-surface text-muted hover:text-text'}`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="h-64 w-full">
+              <h3 className="text-sm text-muted mb-2 text-center">Procurement Spend</h3>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={spendData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                  <XAxis dataKey="period" tick={{fontSize: 12, fill: '#6b7280'}} axisLine={false} tickLine={false} />
+                  <YAxis tick={{fontSize: 12, fill: '#6b7280'}} axisLine={false} tickLine={false} />
+                  <Tooltip cursor={{stroke: '#e5e7eb', strokeWidth: 2}} contentStyle={{borderRadius: '6px', border: '1px solid #e5e7eb'}} />
+                  <Line type="monotone" dataKey="spend" stroke="#4338ca" strokeWidth={2} dot={{r: 4, fill: '#4338ca'}} activeDot={{r: 6}} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            
+            <div className="h-64 w-full">
+              <h3 className="text-sm text-muted mb-2 text-center">Maintenance Cost</h3>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={maintCostData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                  <XAxis dataKey="period" tick={{fontSize: 12, fill: '#6b7280'}} axisLine={false} tickLine={false} />
+                  <YAxis tick={{fontSize: 12, fill: '#6b7280'}} axisLine={false} tickLine={false} />
+                  <Tooltip cursor={{stroke: '#e5e7eb', strokeWidth: 2}} contentStyle={{borderRadius: '6px', border: '1px solid #e5e7eb'}} />
+                  <Area type="monotone" dataKey="cost" stroke="#ef4444" fill="#fecaca" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
       </div>

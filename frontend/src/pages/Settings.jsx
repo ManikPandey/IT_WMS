@@ -43,15 +43,30 @@ export default function Settings() {
 function AuditLogsTab({ token }) {
   const [filter, setFilter] = useState('');
 
-  const { data: logs, isLoading } = useQuery({
-    queryKey: ['audit-log', filter],
+  const [cursor, setCursor] = useState(null);
+  const [allLogs, setAllLogs] = useState([]);
+  const [hasNextPage, setHasNextPage] = useState(false);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['audit-log', filter, cursor],
     queryFn: async () => {
       const url = new URL('http://localhost:3000/audit-log');
       if (filter) url.searchParams.append('entity_type', filter);
+      if (cursor) url.searchParams.append('cursor', cursor);
       const res = await fetch(url.toString(), { headers: { 'Authorization': `Bearer ${token}` } });
       return res.json();
     }
   });
+
+  React.useEffect(() => {
+    if (data?.data) {
+      if (cursor) setAllLogs(prev => [...prev, ...data.data]);
+      else setAllLogs(data.data);
+      setHasNextPage(!!data.nextCursor);
+    }
+  }, [data, cursor]);
+
+  const logs = allLogs;
 
   return (
     <div className="space-y-4">
@@ -60,7 +75,7 @@ function AuditLogsTab({ token }) {
         <select 
           className="border border-border rounded-md px-3 py-1.5 text-sm focus:border-primary"
           value={filter}
-          onChange={e => setFilter(e.target.value)}
+          onChange={e => { setCursor(null); setFilter(e.target.value); }}
         >
           <option value="">All Events</option>
           <option value="ASSET_ALLOCATED">ASSET_ALLOCATED</option>
@@ -81,10 +96,10 @@ function AuditLogsTab({ token }) {
           <tbody>
             {isLoading ? (
               <tr><td colSpan="4" className="px-4 py-6 text-center text-muted">Loading...</td></tr>
-            ) : logs?.length === 0 ? (
+            ) : !Array.isArray(logs) || logs.length === 0 ? (
               <tr><td colSpan="4" className="px-4 py-6 text-center text-muted">No logs found.</td></tr>
             ) : (
-              logs?.map(log => (
+              logs.map(log => (
                 <tr key={log.id} className="border-b border-border last:border-0 hover:bg-surface/50">
                   <td className="px-4 py-3 text-muted whitespace-nowrap">{new Date(log.created_at).toLocaleString()}</td>
                   <td className="px-4 py-3 font-medium">{log.event_type}</td>
@@ -97,6 +112,12 @@ function AuditLogsTab({ token }) {
             )}
           </tbody>
         </table>
+        
+        {hasNextPage && (
+          <div className="p-4 border-t border-border flex justify-center bg-surface/50">
+            <Button variant="secondary" onClick={() => setCursor(data.nextCursor)}>Load More</Button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -155,8 +176,10 @@ function UsersTab({ token }) {
           <tbody>
             {isLoading ? (
               <tr><td colSpan="4" className="px-4 py-6 text-center text-muted">Loading...</td></tr>
+            ) : !Array.isArray(users) || users.length === 0 ? (
+              <tr><td colSpan="4" className="px-4 py-6 text-center text-muted">No users found.</td></tr>
             ) : (
-              users?.map(user => (
+              users.map(user => (
                 <tr key={user.id} className="border-b border-border last:border-0 hover:bg-surface/50">
                   <td className="px-4 py-3 font-medium">{user.name}</td>
                   <td className="px-4 py-3 text-muted">{user.username}</td>
