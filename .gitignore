@@ -1,0 +1,3 @@
+core-service/node_modules/
+inventory-service/node_modules/
+inventory-service/.env

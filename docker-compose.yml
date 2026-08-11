@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  core-db:
+    image: postgres:15-alpine
+    container_name: core-db
+    environment:
+      POSTGRES_USER: core_user
+      POSTGRES_PASSWORD: core_password
+      POSTGRES_DB: core_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - core-db-data:/var/lib/postgresql/data
+
+  inventory-db:
+    image: postgres:15-alpine
+    container_name: inventory-db
+    environment:
+      POSTGRES_USER: inventory_user
+      POSTGRES_PASSWORD: inventory_password
+      POSTGRES_DB: inventory_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - inventory-db-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+  core-service:
+    build:
+      context: ./core-service
+    container_name: core-service
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://core_user:core_password@core-db:5432/core_db?schema=public
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - core-db
+      - redis
+
+  inventory-service:
+    build:
+      context: ./inventory-service
+    container_name: inventory-service
+    ports:
+      - "3001:3001"
+    environment:
+      - DATABASE_URL=postgresql://inventory_user:inventory_password@inventory-db:5432/inventory_db?schema=public
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - inventory-db
+      - redis
+
+volumes:
+  core-db-data:
+  inventory-db-data:
+  redis-data:

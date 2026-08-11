@@ -1,4 +1,4 @@
-# NexusWMS — Distributed Inventory & Procurement System
+# IT_WMS — Distributed Inventory & Procurement System
 
 A MERN-stack IT Asset & Warehouse Management System built to demonstrate real distributed-systems engineering (concurrency control, event-driven communication, idempotency) using a **modular monolith + 2 extracted microservices**, entirely on free-tier infrastructure.
 

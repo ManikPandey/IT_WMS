@@ -1,0 +1,28 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Asset {
+  id               Int      @id @default(autoincrement())
+  asset_tag        String   @unique
+  type             String
+  status           String
+  jsonb_attributes Json?
+  assigned_to      Int?
+  warehouse_id     Int
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+}
+
+model OutboxEvent {
+  id           Int      @id @default(autoincrement())
+  event_type   String
+  payload_json Json
+  published    Boolean  @default(false)
+  created_at   DateTime @default(now())
+}
