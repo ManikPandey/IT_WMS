@@ -4,7 +4,7 @@ import { Button } from '../components/ui';
 
 export default function Login() {
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState('ADMIN');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -15,12 +15,13 @@ export default function Login() {
       const res = await fetch('http://localhost:3000/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, role })
+        body: JSON.stringify({ email, password })
       });
       const data = await res.json();
       if (data.token) {
         localStorage.setItem('token', data.token);
-        localStorage.setItem('role', role);
+        localStorage.setItem('role', data.user.role);
+        localStorage.setItem('name', data.user.name);
         navigate('/');
       } else {
         alert('Login failed');
@@ -50,15 +51,15 @@ export default function Login() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-text mb-1">Role (Mock)</label>
-            <select 
+            <label className="block text-sm font-medium text-text mb-1">Password</label>
+            <input 
+              type="password"
+              required
               className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-primary"
-              value={role}
-              onChange={e => setRole(e.target.value)}
-            >
-              <option value="ADMIN">ADMIN</option>
-              <option value="VIEWER">VIEWER</option>
-            </select>
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="admin123"
+            />
           </div>
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? 'Logging in...' : 'Sign In'}

@@ -9,18 +9,27 @@ datasource db {
 
 model User {
   id            Int      @id @default(autoincrement())
+  username      String   @unique
+  name          String
   email         String   @unique
   password_hash String
   role          String
 }
 
 model PurchaseOrder {
-  id              Int      @id @default(autoincrement())
-  vendor          String
-  budget          Float
-  status          String
-  idempotency_key String   @unique
-  created_at      DateTime @default(now())
+  id                Int       @id @default(autoincrement())
+  vendor            String
+  budget            Float
+  status            String
+  idempotency_key   String    @unique
+  request_date      DateTime  @default(now())
+  action_date       DateTime?
+  gstin             String?
+  department        String?
+  billing_address   String?
+  delivery_address  String?
+  custom_attributes Json?
+  created_at        DateTime  @default(now())
 }
 
 model AuditLog {

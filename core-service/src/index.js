@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const Redis = require('ioredis');
 const crypto = require('crypto');
 const cors = require('cors');
+const bcrypt = require('bcryptjs');
 
 const app = express();
 const prisma = new PrismaClient();
@@ -15,17 +16,15 @@ app.use(cors());
 
 // 1. Auth & RBAC
 app.post('/login', async (req, res) => {
-  const { email, role } = req.body;
-  // For demo purposes, auto-create user or just issue token based on requested role
-  let user = await prisma.user.findUnique({ where: { email } });
-  if (!user) {
-    user = await prisma.user.create({
-      data: { email, role: role || 'VIEWER', password_hash: 'dummy' }
-    });
+  const { email, password } = req.body;
+  const user = await prisma.user.findUnique({ where: { email } });
+  
+  if (!user || !(await bcrypt.compare(password || '', user.password_hash))) {
+    return res.status(401).json({ error: 'Invalid credentials' });
   }
   
-  const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '1h' });
-  res.json({ token });
+  const token = jwt.sign({ id: user.id, email: user.email, role: user.role, username: user.username, name: user.name }, JWT_SECRET, { expiresIn: '1h' });
+  res.json({ token, user: { id: user.id, username: user.username, name: user.name, role: user.role } });
 });
 
 const requireAuth = (req, res, next) => {
@@ -49,15 +48,38 @@ const requireRole = (role) => (req, res, next) => {
   next();
 };
 
+// 1.5 User CRUD (Admin)
+app.get('/users', requireAuth, requireRole('ADMIN'), async (req, res) => {
+  const users = await prisma.user.findMany({
+    select: { id: true, username: true, name: true, email: true, role: true }
+  });
+  res.json(users);
+});
+
+app.post('/users', requireAuth, requireRole('ADMIN'), async (req, res) => {
+  const { username, name, email, password, role } = req.body;
+  const password_hash = await bcrypt.hash(password, 10);
+  const user = await prisma.user.create({
+    data: { username, name, email, password_hash, role }
+  });
+  res.status(201).json({ id: user.id, username, email });
+});
+
 // 2. PO Creation
 app.post('/purchase-orders', requireAuth, async (req, res) => {
-  const { vendor, budget } = req.body;
+  const { vendor, budget, request_date, gstin, department, billing_address, delivery_address, custom_attributes } = req.body;
   const po = await prisma.purchaseOrder.create({
     data: {
       vendor,
       budget,
+      request_date: request_date ? new Date(request_date) : new Date(),
+      gstin,
+      department,
+      billing_address,
+      delivery_address,
+      custom_attributes,
       status: 'PENDING',
-      idempotency_key: `po-create-${Date.now()}` // internal unique just to satisfy schema if needed, but not user provided yet
+      idempotency_key: `po-create-${Date.now()}` // internal unique
     }
   });
   res.status(201).json(po);
@@ -107,7 +129,8 @@ app.post('/purchase-orders/:id/approve', requireAuth, requireRole('ADMIN'), asyn
       data: {
         status: 'APPROVED',
         budget: finalBudget || po.budget,
-        idempotency_key: idempotencyKey
+        idempotency_key: idempotencyKey,
+        action_date: new Date()
       }
     });
 
@@ -143,6 +166,69 @@ app.get('/audit-log', requireAuth, async (req, res) => {
     take: 100
   });
   res.json(logs);
+});
+
+// 4. Procurement Stats
+app.get('/procurement/stats', requireAuth, async (req, res) => {
+  // Aggregate spend over time by month
+  const pos = await prisma.purchaseOrder.findMany({ where: { status: 'APPROVED' } });
+  
+  const spendOverTime = pos.reduce((acc, po) => {
+    const month = po.created_at.toISOString().slice(0, 7);
+    acc[month] = (acc[month] || 0) + po.budget;
+    return acc;
+  }, {});
+
+  res.json({ spendOverTime });
+});
+
+// 5. System Health & Export
+app.get('/system/health', async (req, res) => {
+  try {
+    // Core DB
+    await prisma.$queryRaw`SELECT 1`;
+    // Redis
+    await redis.ping();
+    
+    // Inventory Health
+    let inventoryStatus = 'unknown';
+    try {
+      const invRes = await fetch('http://localhost:3001/health');
+      if (invRes.ok) inventoryStatus = 'ok';
+    } catch (e) {
+      inventoryStatus = 'down';
+    }
+
+    res.json({ status: 'ok', core_db: 'ok', redis: 'ok', inventory_service: inventoryStatus });
+  } catch (e) {
+    res.status(500).json({ status: 'error', error: e.message });
+  }
+});
+
+app.get('/system/export', requireAuth, requireRole('ADMIN'), async (req, res) => {
+  try {
+    const coreDump = {
+      users: await prisma.user.findMany({ select: { id: true, username: true, email: true, role: true } }),
+      purchaseOrders: await prisma.purchaseOrder.findMany(),
+      auditLogs: await prisma.auditLog.findMany()
+    };
+    
+    let inventoryDump = {};
+    try {
+      const invRes = await fetch('http://localhost:3001/export-data');
+      if (invRes.ok) inventoryDump = await invRes.json();
+    } catch (e) {
+      console.warn('Could not fetch inventory dump', e);
+    }
+    
+    const combined = { core: coreDump, inventory: inventoryDump, timestamp: new Date() };
+    
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', 'attachment; filename="system-export.json"');
+    res.send(JSON.stringify(combined, null, 2));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 const port = process.env.PORT || 3000;

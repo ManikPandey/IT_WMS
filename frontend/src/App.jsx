@@ -8,7 +8,8 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Inventory from './pages/Inventory';
 import PurchaseOrders from './pages/PurchaseOrders';
-import AuditLog from './pages/AuditLog';
+import Maintenance from './pages/Maintenance';
+import Settings from './pages/Settings';
 import { ToastProvider } from './components/ui';
 
 const queryClient = new QueryClient({
@@ -35,10 +36,12 @@ const SidebarItem = ({ to, icon: Icon, label }) => {
 const Layout = ({ children }) => {
   const navigate = useNavigate();
   const role = localStorage.getItem('role') || 'VIEWER';
+  const name = localStorage.getItem('name') || 'User';
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('role');
+    localStorage.removeItem('name');
     navigate('/login');
   };
 
@@ -53,11 +56,18 @@ const Layout = ({ children }) => {
           <SidebarItem to="/" icon={LayoutDashboard} label="Dashboard" />
           <SidebarItem to="/inventory" icon={Package} label="Inventory" />
           <SidebarItem to="/purchase-orders" icon={FileText} label="Purchase Orders" />
-          <SidebarItem to="/audit-log" icon={Activity} label="Audit Log" />
+          <SidebarItem to="/maintenance" icon={Activity} label="Maintenance" />
         </nav>
+        
+        {/* Settings at the bottom */}
+        <div className="px-4 pb-4">
+          <SidebarItem to="/settings" icon={Activity} label="Settings" />
+        </div>
+
         <div className="p-4 border-t border-border flex items-center justify-between">
-          <div className="text-sm font-medium px-2 py-1 bg-surface border border-border rounded-md text-text">
-            {role}
+          <div className="flex flex-col">
+            <span className="text-sm font-medium text-text">{name}</span>
+            <span className="text-xs text-muted">{role}</span>
           </div>
           <button onClick={handleLogout} className="text-muted hover:text-text transition-colors p-2" title="Logout">
             <LogOut size={18} />
@@ -85,7 +95,8 @@ function App() {
           <Route path="/" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
           <Route path="/inventory" element={<ProtectedRoute><Layout><Inventory /></Layout></ProtectedRoute>} />
           <Route path="/purchase-orders" element={<ProtectedRoute><Layout><PurchaseOrders /></Layout></ProtectedRoute>} />
-          <Route path="/audit-log" element={<ProtectedRoute><Layout><AuditLog /></Layout></ProtectedRoute>} />
+          <Route path="/maintenance" element={<ProtectedRoute><Layout><Maintenance /></Layout></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute><Layout><Settings /></Layout></ProtectedRoute>} />
         </Routes>
       </Router>
       </ToastProvider>

@@ -15,8 +15,26 @@ model Asset {
   jsonb_attributes Json?
   assigned_to      Int?
   warehouse_id     Int
+  category_id      Int?
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt
+}
+
+model Category {
+  id        Int        @id @default(autoincrement())
+  name      String     @unique
+  parent_id Int?
+}
+
+model MaintenanceTicket {
+  id          Int       @id @default(autoincrement())
+  asset_id    Int
+  issue_type  String
+  description String
+  status      String    @default("OPEN") // OPEN, CLOSED
+  cost        Float?
+  created_at  DateTime  @default(now())
+  resolved_at DateTime?
 }
 
 model OutboxEvent {
