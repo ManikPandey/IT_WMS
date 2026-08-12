@@ -35,33 +35,23 @@ A MERN-stack IT Asset & Warehouse Management System built to demonstrate real di
 
 ## 3. Architecture
 
-```
-┌─────────────┐      REST/JWT       ┌───────────────────┐
-│   React     │ ──────────────────► │   Core Service      │
-│  Frontend   │                     │  (Auth, Procurement,│
-└─────────────┘                     │   Gateway routes)   │
-                                     └─────────┬──────────┘
-                                               │ REST proxy via Opossum
-                                               │ Circuit Breaker
-                                               ▼
-                                     ┌──────────────────────┐
-                                     │ Nginx Load Balancer  │
-                                     └─────────┬────────────┘
-                                               │ Round-robin
-                                               ▼
-                                     ┌──────────────────────┐
-                                     │ Inventory & Allocation │
-                                     │  (3 Docker Replicas) │
-                                     └─────────┬──────────────┘
-                                               │
-                        ┌──────────────────────┼───────────────────┐
-                        ▼                      ▼                   ▼
-                 Postgres (own DB)      Redis (locks/counter)  Redis Streams
-                                                                (events out)
-                                                                    │
-                                                                    ▼
-                                                        Core Service consumes
-                                                        stream → CQRS updates
+```mermaid
+graph TD
+    UI[React Frontend <br/> Vite + Tailwind + TanStack Query] -->|REST / JWT| CORE[Core Service <br/> Node + Express + Prisma]
+    UI -->|REST| NGINX[Nginx Load Balancer]
+    NGINX -->|Proxy /allocate| INV[Inventory Service <br/> 3 Replicas]
+    
+    CORE -->|REST proxy via <br/> Opossum Circuit Breaker| NGINX
+    
+    CORE -->|Reads/Writes| CORE_DB[(Core DB Postgres <br/> Users, POs, Audit, CQRS Dashboard)]
+    INV -->|Reads/Writes| INV_DB[(Inventory DB Postgres <br/> Assets, Categories, Tickets, Outbox)]
+    
+    INV -->|Option B: Decr Counter| REDIS[(Redis <br/> Concurrency Control)]
+    INV -->|Publishes Events via Outbox| STREAMS[Redis Streams <br/> asset-events]
+    
+    STREAMS -->|Consumed via XREADGROUP| CORE
+    
+    CORE -.->|Updates| CQRS[(Dashboard Summary <br/> CQRS Read Model)]
 ```
 
 Two services only, as scoped:
@@ -193,7 +183,8 @@ cd frontend && npm run dev
 - **Phase 3 (Week 5):** Build Core service (Auth, PO approval + idempotency key).
 - **Phase 4 (Week 6):** Wire up outbox → Redis Streams → audit log consumer.
 - **Phase 5 (Week 7):** React frontend + TanStack Query.
-- **Phase 6 (Week 8):** Dockerize everything, deploy free tier, k6 load test, generate graphs for README.
+- **Phase 5.6 (Week 8):** System Design Hardening (Circuit Breaker, Rate Limiting, CQRS, Event-Driven Sagas, Distributed Tracing).
+- **Phase 6 (Week 9):** Dockerize everything, load balance with Nginx, deploy free tier, k6 load test, generate graphs for README.
 
 ---
 
