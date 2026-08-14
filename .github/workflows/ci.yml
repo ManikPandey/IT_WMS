@@ -76,6 +76,7 @@ jobs:
       env:
         DATABASE_URL: "postgresql://user:password@127.0.0.1:5432/core_db?schema=public"
         REDIS_URL: "redis://127.0.0.1:6379"
+        INVENTORY_SERVICE_URL: "http://127.0.0.1:3001"
 
     - name: Install & Test Inventory Service
       run: |
