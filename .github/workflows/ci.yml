@@ -1,0 +1,70 @@
+name: Node.js CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    # We need services for the tests to pass (Postgres and Redis)
+    services:
+      redis:
+        image: redis
+        ports:
+          - 6379:6379
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: core_db
+        ports:
+          - 5432:5432
+      postgres_inventory:
+        image: postgres:15
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: inventory_db
+        ports:
+          - 5433:5432
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Use Node.js 18.x
+      uses: actions/setup-node@v3
+      with:
+        node-version: 18.x
+        cache: 'npm'
+        cache-dependency-path: '**/package-lock.json'
+        
+    - name: Setup Database schemas
+      run: |
+        npm run db:push --prefix core-service
+        npm run db:push --prefix inventory-service
+      env:
+        DATABASE_URL: "postgresql://user:password@localhost:5432/core_db?schema=public"
+        INVENTORY_DATABASE_URL: "postgresql://user:password@localhost:5433/inventory_db?schema=public"
+
+    - name: Install & Test Core Service
+      run: |
+        cd core-service
+        npm ci
+        npm test
+      env:
+        DATABASE_URL: "postgresql://user:password@localhost:5432/core_db?schema=public"
+        REDIS_URL: "redis://localhost:6379"
+
+    - name: Install & Test Inventory Service
+      run: |
+        cd inventory-service
+        npm ci
+        npm test
+      env:
+        DATABASE_URL: "postgresql://user:password@localhost:5433/inventory_db?schema=public"
+        REDIS_URL: "redis://localhost:6379"

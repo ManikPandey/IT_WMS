@@ -20,7 +20,7 @@ export default function Maintenance() {
   const { data: tickets, isLoading } = useQuery({
     queryKey: ['maintenance', filter],
     queryFn: async () => {
-      const url = filter === 'ALL' ? 'http://localhost:3001/maintenance' : `http://localhost:3001/maintenance?status=${filter}`;
+      const url = filter === 'ALL' ? 'http://localhost:4000/maintenance' : `http://localhost:4000/maintenance?status=${filter}`;
       const res = await fetch(url);
       return res.json();
     }
@@ -29,7 +29,7 @@ export default function Maintenance() {
   const { data: maintStats } = useQuery({
     queryKey: ['maintenance-stats', range],
     queryFn: async () => {
-      const res = await fetch(`http://localhost:3001/maintenance/stats?range=${range}`);
+      const res = await fetch(`http://localhost:4000/maintenance/stats?range=${range}`);
       return res.json();
     }
   });
@@ -37,7 +37,7 @@ export default function Maintenance() {
   const resolveMutation = useMutation({
     mutationFn: async ({ id, cost, parts_used, status, file }) => {
       // First, update ticket details
-      const res = await fetch(`http://localhost:3001/maintenance/${id}/resolve`, {
+      const res = await fetch(`http://localhost:4000/maintenance/${id}/resolve`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -53,7 +53,7 @@ export default function Maintenance() {
       if (file) {
         const formData = new FormData();
         formData.append('file', file);
-        const uploadRes = await fetch(`http://localhost:3001/maintenance/${id}/bill`, {
+        const uploadRes = await fetch(`http://localhost:4000/maintenance/${id}/bill`, {
           method: 'POST',
           body: formData
         });
@@ -75,7 +75,7 @@ export default function Maintenance() {
 
   const startWorkMutation = useMutation({
     mutationFn: async (id) => {
-      const res = await fetch(`http://localhost:3001/maintenance/${id}/resolve`, {
+      const res = await fetch(`http://localhost:4000/maintenance/${id}/resolve`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'RUNNING' })

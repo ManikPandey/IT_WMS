@@ -32,7 +32,7 @@ export default function Inventory() {
   const { data: categories } = useQuery({
     queryKey: ['categories'],
     queryFn: async () => {
-      const res = await fetch('http://localhost:3001/categories');
+      const res = await fetch('http://localhost:4000/categories');
       return res.json();
     }
   });
@@ -49,7 +49,7 @@ export default function Inventory() {
       if (search) params.append('search', search);
       if (statusFilter) params.append('status', statusFilter);
       if (cursor) params.append('cursor', cursor);
-      const res = await fetch(`http://localhost:3001/assets?${params.toString()}`);
+      const res = await fetch(`http://localhost:4000/assets?${params.toString()}`);
       return res.json();
     }
   });
@@ -67,7 +67,7 @@ export default function Inventory() {
   // Create Category Mutation
   const createCategoryMutation = useMutation({
     mutationFn: async ({ name, parent_id }) => {
-      const res = await fetch('http://localhost:3001/categories', {
+      const res = await fetch('http://localhost:4000/categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, parent_id: parent_id ? parseInt(parent_id) : null })
@@ -86,7 +86,7 @@ export default function Inventory() {
   // Create Asset Mutation
   const createAssetMutation = useMutation({
     mutationFn: async (data) => {
-      const res = await fetch('http://localhost:3001/assets', {
+      const res = await fetch('http://localhost:4000/assets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
@@ -130,7 +130,7 @@ export default function Inventory() {
 
   const reportIssueMutation = useMutation({
     mutationFn: async (data) => {
-      const res = await fetch(`http://localhost:3001/assets/${selectedAsset.id}/report-issue`, {
+      const res = await fetch(`http://localhost:4000/assets/${selectedAsset.id}/report-issue`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
@@ -154,7 +154,7 @@ export default function Inventory() {
     const formData = new FormData();
     formData.append('file', file);
     try {
-      const res = await fetch('http://localhost:3001/assets/import', { method: 'POST', body: formData });
+      const res = await fetch('http://localhost:4000/assets/import', { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       showToast(`Imported ${data.success} assets.`);
@@ -204,7 +204,7 @@ export default function Inventory() {
               <>
                 <input type="file" id="import-excel" className="hidden" accept=".xlsx" onChange={handleFileUpload} />
                 <Button variant="outline" onClick={() => document.getElementById('import-excel').click()}><Upload size={16} className="mr-2" /> Import</Button>
-                <a href="http://localhost:3001/assets/export" download>
+                <a href="http://localhost:4000/assets/export" download>
                   <Button variant="outline"><Download size={16} className="mr-2" /> Export</Button>
                 </a>
                 <Button onClick={() => setIsCreateOpen(true)}>Create Asset</Button>

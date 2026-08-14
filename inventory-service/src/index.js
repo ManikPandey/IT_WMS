@@ -36,7 +36,8 @@ const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
 app.use(express.json());
 app.use(helmet());
-app.use(cors());
+const frontendOrigin = process.env.FRONTEND_URL || 'http://localhost:5173';
+app.use(cors({ origin: [frontendOrigin] }));
 
 app.use((req, res, next) => {
   req.id = req.headers['x-request-id'] || crypto.randomUUID();
@@ -345,6 +346,10 @@ app.get('/maintenance/stats', async (req, res) => {
 
 // Seed endpoint for testing
 app.post('/seed', async (req, res) => {
+  if (process.env.ENABLE_SEED !== 'true') {
+    return res.status(403).json({ error: 'Seed endpoint is disabled in this environment' });
+  }
+
   const { type, count } = req.body;
   const assetType = type || 'LAPTOP';
   

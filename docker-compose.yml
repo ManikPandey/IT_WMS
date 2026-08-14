@@ -30,9 +30,9 @@ services:
       - DATABASE_URL=postgresql://user:password@inventory_db:5432/inventory_db
       - REDIS_URL=redis://redis:6379
       - PORT=3001
-      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
-      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
-      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
+      - CLOUDINARY_CLOUD_NAME=sa2vx7f7
+      - CLOUDINARY_API_KEY=138125896626592
+      - CLOUDINARY_API_SECRET=spBLiq3oiwv4_0q8eqMYK2CqksU
     deploy:
       replicas: 3
     depends_on:

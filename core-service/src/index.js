@@ -23,7 +23,8 @@ const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
 
 // 1. Security & Middleware
 app.use(helmet());
-app.use(cors({ origin: ['http://localhost:5173'] })); // Tightened CORS
+const frontendOrigin = process.env.FRONTEND_URL || 'http://localhost:5173';
+app.use(cors({ origin: [frontendOrigin] })); // Tightened CORS
 app.use(express.json());
 
 // Correlation ID Middleware
@@ -396,6 +397,11 @@ app.get('/system/health', async (req, res) => {
   } catch (e) {
     res.status(500).json({ status: 'error', error: e.message });
   }
+});
+
+app.get('/health', async (req, res) => {
+  // Simple ping for Render
+  res.send('OK');
 });
 
 app.get('/system/export', requireAuth, requireRole('ADMIN'), async (req, res) => {

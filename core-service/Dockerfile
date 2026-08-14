@@ -25,9 +25,8 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/prisma ./prisma
 COPY src ./src
 
-# Set non-root user permissions
-RUN chown -R node:node /app
+# Set non-root user
 USER node
 
-EXPOSE 3001
+EXPOSE 3000
 CMD ["npm", "start"]
