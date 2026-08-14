@@ -43,13 +43,21 @@ jobs:
         cache: 'npm'
         cache-dependency-path: '**/package-lock.json'
         
-    - name: Setup Database schemas
+    - name: Setup Core Database
       run: |
-        cd core-service && npm ci && npx prisma db push
-        cd ../inventory-service && npm ci && npx prisma db push
+        cd core-service
+        npm ci
+        npx prisma db push
       env:
-        DATABASE_URL: "postgresql://user:password@localhost:5432/core_db?schema=public"
-        INVENTORY_DATABASE_URL: "postgresql://user:password@localhost:5433/inventory_db?schema=public"
+        DATABASE_URL: "postgresql://user:password@127.0.0.1:5432/core_db?schema=public"
+
+    - name: Setup Inventory Database
+      run: |
+        cd inventory-service
+        npm ci
+        npx prisma db push
+      env:
+        DATABASE_URL: "postgresql://user:password@127.0.0.1:5433/inventory_db?schema=public"
 
     - name: Install & Test Core Service
       run: |
@@ -57,8 +65,8 @@ jobs:
         npm ci
         npm test
       env:
-        DATABASE_URL: "postgresql://user:password@localhost:5432/core_db?schema=public"
-        REDIS_URL: "redis://localhost:6379"
+        DATABASE_URL: "postgresql://user:password@127.0.0.1:5432/core_db?schema=public"
+        REDIS_URL: "redis://127.0.0.1:6379"
 
     - name: Install & Test Inventory Service
       run: |
@@ -66,5 +74,5 @@ jobs:
         npm ci
         npm test
       env:
-        DATABASE_URL: "postgresql://user:password@localhost:5433/inventory_db?schema=public"
-        REDIS_URL: "redis://localhost:6379"
+        DATABASE_URL: "postgresql://user:password@127.0.0.1:5433/inventory_db?schema=public"
+        REDIS_URL: "redis://127.0.0.1:6379"
