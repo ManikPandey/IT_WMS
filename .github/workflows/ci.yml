@@ -34,10 +34,10 @@ jobs:
           - 5433:5432
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Use Node.js 18.x
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: 18.x
         cache: 'npm'
@@ -45,8 +45,8 @@ jobs:
         
     - name: Setup Database schemas
       run: |
-        npm run db:push --prefix core-service
-        npm run db:push --prefix inventory-service
+        cd core-service && npm ci && npx prisma db push
+        cd ../inventory-service && npm ci && npx prisma db push
       env:
         DATABASE_URL: "postgresql://user:password@localhost:5432/core_db?schema=public"
         INVENTORY_DATABASE_URL: "postgresql://user:password@localhost:5433/inventory_db?schema=public"
