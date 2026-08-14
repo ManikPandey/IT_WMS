@@ -346,6 +346,7 @@ app.get('/maintenance/stats', async (req, res) => {
 
 // Seed endpoint for testing
 app.post('/seed', async (req, res) => {
+  console.log("ENABLE_SEED is:", process.env.ENABLE_SEED);
   if (process.env.ENABLE_SEED !== 'true') {
     return res.status(403).json({ error: 'Seed endpoint is disabled in this environment' });
   }

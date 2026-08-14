@@ -44,6 +44,9 @@ describe('System Hardening: Concurrency & Saga', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'CONCURRENCY_TEST', count: 50 })
     });
+    if (!seedRes.ok) {
+      console.log('Seed Error:', seedRes.status, await seedRes.text());
+    }
     expect(seedRes.ok).toBe(true);
     
     // Fire 100 concurrent requests to core-service /allocate (which proxies via opossum to inventory)

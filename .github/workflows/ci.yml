@@ -62,8 +62,11 @@ jobs:
     - name: Install & Test Core Service
       run: |
         cd inventory-service
-        npm ci
-        DATABASE_URL="postgresql://user:password@127.0.0.1:5433/inventory_db?schema=public" REDIS_URL="redis://127.0.0.1:6379" PORT=3001 ENABLE_SEED=true npm start &
+        export DATABASE_URL="postgresql://user:password@127.0.0.1:5433/inventory_db?schema=public"
+        export REDIS_URL="redis://127.0.0.1:6379"
+        export PORT="3001"
+        export ENABLE_SEED="true"
+        npm start &
         sleep 5
         cd ../core-service
         npm ci
