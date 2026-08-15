@@ -40,11 +40,14 @@ const app = express();
 const prisma = new PrismaClient();
 const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
+const INVENTORY_URL = process.env.INVENTORY_SERVICE_URL || 'http://localhost:3001';
 
 // 1. Security & Middleware
 app.use(helmet());
-const frontendOrigin = process.env.FRONTEND_URL || 'http://localhost:5173';
-app.use(cors({ origin: [frontendOrigin] })); // Tightened CORS
+const frontendOrigins = process.env.FRONTEND_URL 
+  ? process.env.FRONTEND_URL.split(',').map(u => u.trim()) 
+  : ['http://localhost:5173'];
+app.use(cors({ origin: frontendOrigins })); // Tightened CORS
 app.use(express.json());
 
 // Correlation ID Middleware
@@ -599,7 +602,7 @@ app.get('/procurement/stats', requireAuth, requireRole(['ADMIN', 'VIEWER']), asy
 
 // Circuit Breaker for Inventory Service Calls
 const fetchInventoryHealth = async () => {
-  const res = await fetch('http://localhost:3001/health', { signal: AbortSignal.timeout(2000) });
+  const res = await fetch(`${INVENTORY_URL}/health`, { signal: AbortSignal.timeout(2000) });
   if (!res.ok) throw new Error('Inventory returned non-200');
   return res.json();
 };
@@ -613,7 +616,6 @@ const inventoryHealthBreaker = new CircuitBreaker(fetchInventoryHealth, {
 inventoryHealthBreaker.fallback(() => ({ status: 'degraded', message: 'Inventory Service temporarily unavailable' }));
 
 // Circuit Breaker for Inventory Allocate
-const INVENTORY_URL = process.env.INVENTORY_SERVICE_URL || 'http://localhost:3001';
 
 const fetchInventoryAllocate = async (payload, reqId) => {
   const res = await fetch(`${INVENTORY_URL}/allocate?strategy=redis`, {
@@ -695,7 +697,7 @@ app.get('/system/export', requireAuth, requireRole('ADMIN'), async (req, res) =>
     
     let inventoryDump = {};
     try {
-      const invRes = await fetch('http://localhost:3001/export-data');
+      const invRes = await fetch(`${INVENTORY_URL}/export-data`);
       if (invRes.ok) inventoryDump = await invRes.json();
     } catch (e) {
       req.log.warn('Could not fetch inventory dump for export', e);
