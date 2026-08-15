@@ -458,34 +458,44 @@ app.post('/purchase-orders/:id/receive', requireAuth, requireRole('ADMIN'), uplo
 });
 
 app.get('/purchase-orders', requireAuth, requireRole(['ADMIN', 'VIEWER']), async (req, res) => {
-  const { cursor, search, limit = 50 } = req.query;
-  const where = {};
-  
-  if (search) {
-    where.OR = [
-      { vendor: { contains: search, mode: 'insensitive' } },
-      { department: { contains: search, mode: 'insensitive' } }
-    ];
-  }
+  try {
+    const { cursor, search, limit = 50 } = req.query;
+    const where = {};
+    
+    if (search) {
+      where.OR = [
+        { vendor: { contains: search, mode: 'insensitive' } },
+        { department: { contains: search, mode: 'insensitive' } }
+      ];
+    }
 
-  const query = {
-    where,
-    take: Number(limit) + 1,
-    orderBy: { id: 'desc' }
-  };
-  
-  if (cursor) {
-    query.cursor = { id: parseInt(cursor, 10) };
-  }
+    const query = {
+      where,
+      take: Number(limit) + 1,
+      orderBy: { id: 'desc' },
+      include: { line_items: true }
+    };
+    
+    if (cursor && cursor !== 'null' && cursor !== 'undefined') {
+      const cursorId = parseInt(cursor, 10);
+      if (!isNaN(cursorId)) {
+        query.cursor = { id: cursorId };
+        query.skip = 1; // Skip the cursor itself
+      }
+    }
 
-  const pos = await prisma.purchaseOrder.findMany(query);
-  let nextCursor = null;
-  if (pos.length > limit) {
-    const nextItem = pos.pop();
-    nextCursor = nextItem.id;
+    const pos = await prisma.purchaseOrder.findMany(query);
+    let nextCursor = null;
+    if (pos.length > limit) {
+      const nextItem = pos.pop();
+      nextCursor = nextItem.id;
+    }
+    
+    res.json({ data: pos, nextCursor });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: 'Failed to fetch purchase orders' });
   }
-  
-  res.json({ data: pos, nextCursor });
 });
 
 app.post('/purchase-orders/:id/approve', requireAuth, requireRole('ADMIN'), async (req, res) => {
@@ -589,9 +599,10 @@ app.get('/procurement/stats', requireAuth, requireRole(['ADMIN', 'VIEWER']), asy
     const { range } = req.query;
     const truncStr = range === 'yearly' ? 'year' : range === 'weekly' ? 'week' : 'month';
     const stats = await prisma.$queryRawUnsafe(`
-      SELECT date_trunc($1, created_at) as period, SUM(budget) as total_spend 
-      FROM "PurchaseOrder" 
-      WHERE status IN ('APPROVED', 'ISSUED', 'COMPLETED') 
+      SELECT date_trunc($1, po.created_at) as period, SUM(li.quantity * li.unit_price) as total_spend 
+      FROM "PurchaseOrder" po
+      JOIN "POLineItem" li ON po.id = li.po_id
+      WHERE po.status IN ('APPROVED', 'ISSUED', 'COMPLETED', 'PARTIALLY_RECEIVED', 'RECEIVED') 
       GROUP BY period 
       ORDER BY period ASC
     `, truncStr);
