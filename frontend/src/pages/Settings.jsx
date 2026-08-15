@@ -51,7 +51,7 @@ function AuditLogsTab({ token }) {
   const { data, isLoading } = useQuery({
     queryKey: ['audit-log', filter, cursor],
     queryFn: async () => {
-      const url = new URL('http://localhost:3000/audit-log');
+      const url = new URL(`${import.meta.env.VITE_API_URL}/audit-log`);
       if (filter) url.searchParams.append('entity_type', filter);
       if (cursor) url.searchParams.append('cursor', cursor);
       const res = await fetch(url.toString(), { headers: { 'Authorization': `Bearer ${token}` } });
@@ -133,14 +133,14 @@ function UsersTab({ token }) {
   const { data: users, isLoading } = useQuery({
     queryKey: ['users'],
     queryFn: async () => {
-      const res = await fetch('http://localhost:3000/users', { headers: { 'Authorization': `Bearer ${token}` } });
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/users`, { headers: { 'Authorization': `Bearer ${token}` } });
       return res.json();
     }
   });
 
   const createMutation = useMutation({
     mutationFn: async (data) => {
-      const res = await fetch('http://localhost:3000/users', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(data)
@@ -222,7 +222,7 @@ function DataManagementTab({ token }) {
   const handleExport = async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:3000/system/export', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/system/export`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Export failed');
@@ -266,7 +266,7 @@ function CategoriesTab({ token }) {
   const { data: categories, isLoading } = useQuery({
     queryKey: ['categories'],
     queryFn: async () => {
-      const res = await fetch('http://localhost:3001/categories');
+      const res = await fetch(`${import.meta.env.VITE_INVENTORY_URL}/categories`);
       return res.json();
     }
   });
@@ -278,7 +278,7 @@ function CategoriesTab({ token }) {
         parent_id: data.parent_id ? parseInt(data.parent_id) : null,
         attribute_schema: data.attribute_schema ? JSON.parse(data.attribute_schema) : {}
       };
-      const res = await fetch('http://localhost:3001/categories', {
+      const res = await fetch(`${import.meta.env.VITE_INVENTORY_URL}/categories`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -300,7 +300,7 @@ function CategoriesTab({ token }) {
 
   const deleteMutation = useMutation({
     mutationFn: async (id) => {
-      const res = await fetch(`http://localhost:3001/categories/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${import.meta.env.VITE_INVENTORY_URL}/categories/${id}`, { method: 'DELETE' });
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.error || 'Failed to delete category');

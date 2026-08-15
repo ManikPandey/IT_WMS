@@ -25,7 +25,7 @@ export default function PurchaseOrders() {
   const { data: categories } = useQuery({
     queryKey: ['categories'],
     queryFn: async () => {
-      const res = await fetch('http://localhost:3001/categories');
+      const res = await fetch(`${import.meta.env.VITE_INVENTORY_URL}/categories`);
       return res.json();
     }
   });
@@ -44,7 +44,7 @@ export default function PurchaseOrders() {
       if (search) params.append('search', search);
       if (cursor) params.append('cursor', cursor);
       
-      const res = await fetch(`http://localhost:3000/purchase-orders?${params.toString()}`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/purchase-orders?${params.toString()}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       return res.json();
@@ -92,7 +92,7 @@ export default function PurchaseOrders() {
         formData.append('document', documentFile);
       }
 
-      const res = await fetch('http://localhost:3000/purchase-orders', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/purchase-orders`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }, // Removed Content-Type to let browser set boundary
         body: formData
@@ -118,7 +118,7 @@ export default function PurchaseOrders() {
       const formData = new FormData();
       formData.append('file', grnFile);
       
-      const res = await fetch(`http://localhost:3000/purchase-orders/${grnPoId}/receive`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/purchase-orders/${grnPoId}/receive`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData
@@ -142,7 +142,7 @@ export default function PurchaseOrders() {
   const approveMutation = useMutation({
     mutationFn: async (id) => {
       const idemKey = `idem-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`; 
-      const res = await fetch(`http://localhost:3000/purchase-orders/${id}/approve`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/purchase-orders/${id}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'Idempotency-Key': idemKey },
         body: JSON.stringify({ comments: 'Approved via UI', finalBudget: 2000 })
@@ -156,7 +156,7 @@ export default function PurchaseOrders() {
 
   const rejectMutation = useMutation({
     mutationFn: async (id) => {
-      const res = await fetch(`http://localhost:3000/purchase-orders/${id}/reject`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/purchase-orders/${id}/reject`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
       });
@@ -327,7 +327,7 @@ export default function PurchaseOrders() {
             </p>
             <div className="flex justify-between items-center mb-2">
               <span className="text-sm">Need the format?</span>
-              <a href="http://localhost:3000/purchase-orders/grn-template" download className="text-primary hover:underline text-sm font-medium">Download Template</a>
+              <a href={`${import.meta.env.VITE_API_URL}/purchase-orders/grn-template`} download className="text-primary hover:underline text-sm font-medium">Download Template</a>
             </div>
             <input type="file" accept=".xlsx" className="block w-full text-sm text-text file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white hover:file:bg-primary/90" onChange={(e) => setGrnFile(e.target.files[0])} />
             <Button className="w-full" onClick={() => grnMutation.mutate()} disabled={!grnFile || grnMutation.isPending}>

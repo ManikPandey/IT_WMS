@@ -22,7 +22,7 @@ export const fetchWithAuth = async (url, options = {}) => {
     const userId = localStorage.getItem('userId');
     
     if (refreshToken && userId) {
-      const refreshRes = await fetch('http://localhost:3000/auth/refresh', {
+      const refreshRes = await fetch(`${import.meta.env.VITE_API_URL}/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken, userId })

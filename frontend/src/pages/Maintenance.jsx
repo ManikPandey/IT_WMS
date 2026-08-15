@@ -23,7 +23,7 @@ export default function Maintenance() {
   const { data: tickets, isLoading } = useQuery({
     queryKey: ['maintenance', filter],
     queryFn: async () => {
-      const url = filter === 'ALL' ? 'http://localhost:4000/maintenance' : `http://localhost:4000/maintenance?status=${filter}`;
+      const url = filter === 'ALL' ? `${import.meta.env.VITE_INVENTORY_URL}/maintenance` : `${import.meta.env.VITE_INVENTORY_URL}/maintenance?status=${filter}`;
       const res = await fetch(url);
       return res.json();
     }
@@ -32,7 +32,7 @@ export default function Maintenance() {
   const { data: maintStats } = useQuery({
     queryKey: ['maintenance-stats', range],
     queryFn: async () => {
-      const res = await fetch(`http://localhost:4000/maintenance/stats?range=${range}`);
+      const res = await fetch(`${import.meta.env.VITE_INVENTORY_URL}/maintenance/stats?range=${range}`);
       return res.json();
     }
   });
@@ -40,7 +40,7 @@ export default function Maintenance() {
   const resolveMutation = useMutation({
     mutationFn: async ({ id, cost, parts_used, file }) => {
       // First, update ticket details
-      const res = await fetch(`http://localhost:4000/maintenance/${id}/submit-approval`, {
+      const res = await fetch(`${import.meta.env.VITE_INVENTORY_URL}/maintenance/${id}/submit-approval`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -55,7 +55,7 @@ export default function Maintenance() {
       if (file) {
         const formData = new FormData();
         formData.append('file', file);
-        const uploadRes = await fetch(`http://localhost:4000/maintenance/${id}/bill`, {
+        const uploadRes = await fetch(`${import.meta.env.VITE_INVENTORY_URL}/maintenance/${id}/bill`, {
           method: 'POST',
           body: formData
         });
@@ -77,7 +77,7 @@ export default function Maintenance() {
 
   const startWorkMutation = useMutation({
     mutationFn: async (id) => {
-      const res = await fetch(`http://localhost:4000/maintenance/${id}/resolve`, {
+      const res = await fetch(`${import.meta.env.VITE_INVENTORY_URL}/maintenance/${id}/resolve`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'RUNNING' })
@@ -93,7 +93,7 @@ export default function Maintenance() {
 
   const approveMutation = useMutation({
     mutationFn: async (id) => {
-      const res = await fetch(`http://localhost:4000/maintenance/${id}/approve`, {
+      const res = await fetch(`${import.meta.env.VITE_INVENTORY_URL}/maintenance/${id}/approve`, {
         method: 'PATCH'
       });
       if (!res.ok) throw new Error('Failed to approve');
@@ -108,7 +108,7 @@ export default function Maintenance() {
 
   const rejectMutation = useMutation({
     mutationFn: async ({ id, admin_note }) => {
-      const res = await fetch(`http://localhost:4000/maintenance/${id}/reject`, {
+      const res = await fetch(`${import.meta.env.VITE_INVENTORY_URL}/maintenance/${id}/reject`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ admin_note })

@@ -16,7 +16,7 @@ export default function Dashboard() {
   const { data: invStats, isLoading: invLoading } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: async () => {
-      const res = await fetch('http://localhost:3000/dashboard/stats', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/dashboard/stats`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       return res.json();
@@ -27,7 +27,7 @@ export default function Dashboard() {
   const { data: procStats, isLoading: procLoading } = useQuery({
     queryKey: ['procurement-stats', range],
     queryFn: async () => {
-      const res = await fetch(`http://localhost:3000/procurement/stats?range=${range}`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/procurement/stats?range=${range}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       return res.json();
@@ -37,7 +37,7 @@ export default function Dashboard() {
   const { data: maintStats } = useQuery({
     queryKey: ['maintenance-stats', range],
     queryFn: async () => {
-      const res = await fetch(`http://localhost:4000/maintenance/stats?range=${range}`, {
+      const res = await fetch(`${import.meta.env.VITE_INVENTORY_URL}/maintenance/stats?range=${range}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       return res.json();
@@ -47,7 +47,7 @@ export default function Dashboard() {
   const { data: health } = useQuery({
     queryKey: ['system-health'],
     queryFn: async () => {
-      const res = await fetch('http://localhost:3000/system/health');
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/system/health`);
       return res.json();
     },
     refetchInterval: 10000 // poll every 10s

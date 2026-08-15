@@ -7,7 +7,7 @@ export default function Archive() {
   const { data: assets, isLoading } = useQuery({
     queryKey: ['retired-assets'],
     queryFn: async () => {
-      const res = await fetch('http://localhost:4000/assets?status=RETIRED');
+      const res = await fetch(`${import.meta.env.VITE_INVENTORY_URL}/assets?status=RETIRED`);
       return res.json();
     }
   });

@@ -57,7 +57,7 @@ const Layout = ({ children }) => {
 
   const handleLogout = async () => {
     try {
-      await fetchWithAuth('http://localhost:3000/auth/logout', { method: 'POST' });
+      await fetchWithAuth(`${import.meta.env.VITE_API_URL}/auth/logout`, { method: 'POST' });
     } catch(e) {}
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');

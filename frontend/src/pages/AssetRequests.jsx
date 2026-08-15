@@ -23,8 +23,8 @@ export default function AssetRequests() {
     setLoading(true);
     try {
       const [reqRes, catRes] = await Promise.all([
-        fetchWithAuth('http://localhost:3000/asset-requests'),
-        fetchWithAuth('http://localhost:3001/categories')
+        fetchWithAuth(`${import.meta.env.VITE_API_URL}/asset-requests`),
+        fetchWithAuth(`${import.meta.env.VITE_INVENTORY_URL}/categories`)
       ]);
       const reqData = await reqRes.json();
       const catData = await catRes.json();
@@ -40,7 +40,7 @@ export default function AssetRequests() {
   const handleCreateRequest = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetchWithAuth('http://localhost:3000/asset-requests', {
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_URL}/asset-requests`, {
         method: 'POST',
         body: JSON.stringify({
           category_id: parseInt(categoryId),
@@ -63,7 +63,7 @@ export default function AssetRequests() {
 
   const handleAction = async (id, action) => {
     try {
-      const res = await fetchWithAuth(`http://localhost:3000/asset-requests/${id}/${action}`, {
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_URL}/asset-requests/${id}/${action}`, {
         method: 'PATCH'
       });
       if (res.ok) {
