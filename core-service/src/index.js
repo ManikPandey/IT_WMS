@@ -45,9 +45,18 @@ const INVENTORY_URL = process.env.INVENTORY_SERVICE_URL || 'http://localhost:300
 // 1. Security & Middleware
 app.use(helmet());
 const frontendOrigins = process.env.FRONTEND_URL 
-  ? process.env.FRONTEND_URL.split(',').map(u => u.trim()) 
-  : ['http://localhost:5173'];
-app.use(cors({ origin: frontendOrigins })); // Tightened CORS
+  ? process.env.FRONTEND_URL.split(',').map(u => u.trim().replace(/\/$/, '')) 
+  : [];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true); // Allow non-browser requests
+    if (origin.includes('localhost') || origin.includes('vercel.app') || frontendOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  }
+}));
 app.use(express.json());
 
 // Correlation ID Middleware

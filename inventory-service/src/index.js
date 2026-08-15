@@ -37,9 +37,18 @@ const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 app.use(express.json());
 app.use(helmet());
 const frontendOrigins = process.env.FRONTEND_URL 
-  ? process.env.FRONTEND_URL.split(',').map(u => u.trim()) 
-  : ['http://localhost:5173'];
-app.use(cors({ origin: frontendOrigins }));
+  ? process.env.FRONTEND_URL.split(',').map(u => u.trim().replace(/\/$/, '')) 
+  : [];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true); // Allow non-browser requests
+    if (origin.includes('localhost') || origin.includes('vercel.app') || frontendOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  }
+}));
 
 app.use((req, res, next) => {
   req.id = req.headers['x-request-id'] || crypto.randomUUID();
