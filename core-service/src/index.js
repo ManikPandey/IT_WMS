@@ -12,6 +12,26 @@ const swaggerUi = require('swagger-ui-express');
 const CircuitBreaker = require('opossum');
 const { z } = require('zod');
 const { generateSpec } = require('./swagger');
+const multer = require('multer');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const cloudinary = require('cloudinary').v2;
+const exceljs = require('exceljs');
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'demo',
+  api_key: process.env.CLOUDINARY_API_KEY || 'demo',
+  api_secret: process.env.CLOUDINARY_API_SECRET || 'demo'
+});
+
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'it_wms_po_documents',
+    allowedFormats: ['jpg', 'png', 'pdf'],
+  },
+});
+const upload = multer({ storage: storage, limits: { fileSize: 2 * 1024 * 1024 } }); // 2MB
+const uploadExcel = multer({ dest: 'uploads/' });
 
 // Logger setup
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
@@ -53,8 +73,39 @@ app.post('/login', async (req, res) => {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
   
-  const token = jwt.sign({ id: user.id, email: user.email, role: user.role, username: user.username, name: user.name }, JWT_SECRET, { expiresIn: '1h' });
-  res.json({ token, user: { id: user.id, username: user.username, name: user.name, role: user.role } });
+  // 15 minute access token
+  const token = jwt.sign({ id: user.id, email: user.email, role: user.role, username: user.username, name: user.name }, JWT_SECRET, { expiresIn: '15m' });
+  
+  // 7 day refresh token
+  const refreshToken = crypto.randomBytes(40).toString('hex');
+  const hashedRefresh = crypto.createHash('sha256').update(refreshToken).digest('hex');
+  
+  await redis.set(`refresh_token:${user.id}`, hashedRefresh, 'EX', 7 * 24 * 60 * 60);
+
+  res.json({ token, refreshToken, user: { id: user.id, username: user.username, name: user.name, role: user.role } });
+});
+
+app.post('/auth/refresh', async (req, res) => {
+  const { refreshToken, userId } = req.body;
+  if (!refreshToken || !userId) return res.status(400).json({ error: 'Missing refreshToken or userId' });
+
+  const storedHashed = await redis.get(`refresh_token:${userId}`);
+  if (!storedHashed) return res.status(401).json({ error: 'Invalid or expired refresh token' });
+
+  const providedHashed = crypto.createHash('sha256').update(refreshToken).digest('hex');
+  if (storedHashed !== providedHashed) return res.status(401).json({ error: 'Invalid refresh token' });
+
+  const user = await prisma.user.findUnique({ where: { id: parseInt(userId, 10) } });
+  if (!user) return res.status(401).json({ error: 'User no longer exists' });
+
+  const newToken = jwt.sign({ id: user.id, email: user.email, role: user.role, username: user.username, name: user.name }, JWT_SECRET, { expiresIn: '15m' });
+  
+  // Rotate refresh token
+  const newRefreshToken = crypto.randomBytes(40).toString('hex');
+  const newHashedRefresh = crypto.createHash('sha256').update(newRefreshToken).digest('hex');
+  await redis.set(`refresh_token:${user.id}`, newHashedRefresh, 'EX', 7 * 24 * 60 * 60);
+
+  res.json({ token: newToken, refreshToken: newRefreshToken });
 });
 
 const requireAuth = (req, res, next) => {
@@ -79,6 +130,11 @@ const requireRole = (roles) => (req, res, next) => {
   }
   next();
 };
+
+app.post('/auth/logout', requireAuth, async (req, res) => {
+  await redis.del(`refresh_token:${req.user.id}`);
+  res.json({ message: 'Logged out successfully' });
+});
 
 // 3. Rate Limiting (Token Bucket)
 const rateLimiter = async (req, res, next) => {
@@ -149,34 +205,243 @@ app.post('/users', requireAuth, requireRole('ADMIN'), async (req, res) => {
   res.status(201).json({ id: user.id, username, email });
 });
 
-// Zod schema for PO creation
+
+// Asset Requests
+const CreateAssetRequestSchema = z.object({
+  category_id: z.number().int().positive(),
+  justification: z.string().min(5)
+});
+
+app.post('/asset-requests', requireAuth, requireRole(['EMPLOYEE', 'ADMIN']), async (req, res) => {
+  try {
+    const parsed = CreateAssetRequestSchema.parse(req.body);
+    const request = await prisma.assetRequest.create({
+      data: {
+        requested_by: req.user.id,
+        category_id: parsed.category_id,
+        justification: parsed.justification
+      }
+    });
+    res.status(201).json(request);
+  } catch (err) {
+    if (err instanceof z.ZodError) return res.status(400).json({ error: err.issues });
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+app.get('/asset-requests', requireAuth, async (req, res) => {
+  const where = req.user.role === 'EMPLOYEE' ? { requested_by: req.user.id } : {};
+  const requests = await prisma.assetRequest.findMany({ where, orderBy: { created_at: 'desc' } });
+  res.json(requests);
+});
+
+app.patch('/asset-requests/:id/approve', requireAuth, requireRole('ADMIN'), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const assetRequest = await prisma.assetRequest.findUnique({ where: { id } });
+  
+  if (!assetRequest) return res.status(404).json({ error: 'Request not found' });
+  if (assetRequest.status !== 'PENDING') return res.status(400).json({ error: 'Already processed' });
+
+  try {
+    // Attempt allocation via Circuit Breaker
+    await allocateBreaker.fire({
+      assetType: 'CATEGORY_FALLBACK', // In a real system, translate category_id to type, or support category_id allocation
+      assignedTo: assetRequest.requested_by,
+      warehouseId: 1
+    }, req.id);
+
+    const updated = await prisma.assetRequest.update({
+      where: { id },
+      data: { status: 'APPROVED', approved_by: req.user.id, resolved_at: new Date() }
+    });
+    res.json(updated);
+  } catch (err) {
+    req.log.error(err, 'Asset request approval failed during allocation');
+    res.status(500).json({ error: 'Failed to allocate asset. Out of stock?' });
+  }
+});
+
+app.patch('/asset-requests/:id/reject', requireAuth, requireRole('ADMIN'), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const assetRequest = await prisma.assetRequest.findUnique({ where: { id } });
+  
+  if (!assetRequest) return res.status(404).json({ error: 'Request not found' });
+  if (assetRequest.status !== 'PENDING') return res.status(400).json({ error: 'Already processed' });
+
+  const updated = await prisma.assetRequest.update({
+    where: { id },
+    data: { status: 'REJECTED', approved_by: req.user.id, resolved_at: new Date() }
+  });
+  res.json(updated);
+});
+
+// Zod schema for PO creation (modified for line items)
 const CreatePOSchema = z.object({
   vendor: z.string().min(1),
-  budget: z.number().positive(),
   request_date: z.string().optional(),
   gstin: z.string().optional(),
   department: z.string().optional(),
   billing_address: z.string().optional(),
   delivery_address: z.string().optional(),
-  custom_attributes: z.record(z.any()).optional()
+  custom_attributes: z.string().optional(), // Passed as JSON string if formData
+  line_items: z.string() // Passed as JSON string: [{ category_id, description, quantity, unit_price }]
 });
 
-app.post('/purchase-orders', requireAuth, async (req, res) => {
+app.post('/purchase-orders', requireAuth, requireRole('ADMIN'), upload.single('document'), async (req, res) => {
   try {
     const parsed = CreatePOSchema.parse(req.body);
+    const lineItems = JSON.parse(parsed.line_items);
+    const customAttributes = parsed.custom_attributes ? JSON.parse(parsed.custom_attributes) : null;
+    
+    let totalBudget = 0;
+    lineItems.forEach(item => totalBudget += (item.quantity * item.unit_price));
+
     const po = await prisma.purchaseOrder.create({
       data: {
-        ...parsed,
+        vendor: parsed.vendor,
         request_date: parsed.request_date ? new Date(parsed.request_date) : new Date(),
+        gstin: parsed.gstin,
         status: 'PENDING',
-        idempotency_key: `po-create-${Date.now()}`
-      }
+        idempotency_key: crypto.randomUUID(),
+        department: parsed.department,
+        billing_address: parsed.billing_address,
+        delivery_address: parsed.delivery_address,
+        custom_attributes: parsed.custom_attributes ? JSON.parse(parsed.custom_attributes) : null,
+        document_url: req.file ? req.file.path : null,
+        line_items: {
+          create: lineItems.map(li => ({
+            category_id: li.category_id,
+            description: li.description,
+            quantity: li.quantity,
+            unit_price: li.unit_price
+          }))
+        }
+      },
+      include: { line_items: true }
     });
+
     res.status(201).json(po);
-  } catch (err) {
-    if (err instanceof z.ZodError) return res.status(400).json({ error: err.issues });
-    req.log.error(err);
-    res.status(500).json({ error: 'Internal Server Error' });
+  } catch (error) {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+    req.log.error(error);
+    res.status(500).json({ error: 'Failed to create PO' });
+  }
+});
+
+app.get('/purchase-orders/grn-template', requireAuth, async (req, res) => {
+  try {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('GRN');
+    worksheet.columns = [
+      { header: 'LineItemID', key: 'line_item_id', width: 15 },
+      { header: 'ReceivedQty', key: 'received_qty', width: 15 },
+      { header: 'AssetTag', key: 'asset_tag', width: 25 },
+      { header: 'SerialNumber', key: 'serial_number', width: 25 }
+    ];
+    worksheet.addRow({ line_item_id: 1, received_qty: 1, asset_tag: 'TAG-1234', serial_number: 'SN-ABCD' });
+    
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=GRN_Template.xlsx');
+    
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    req.log.error(error);
+    res.status(500).json({ error: 'Failed to generate template' });
+  }
+});
+
+// Excel file upload via Multer for GRN (Goods Receipt Note)
+app.post('/purchase-orders/:id/receive', requireAuth, requireRole('ADMIN'), upload.single('file'), async (req, res) => {
+  const poId = parseInt(req.params.id, 10);
+  
+  if (!req.file) return res.status(400).json({ error: 'Excel file is required' });
+
+  try {
+    const po = await prisma.purchaseOrder.findUnique({
+      where: { id: poId },
+      include: { line_items: true }
+    });
+
+    if (!po) return res.status(404).json({ error: 'PO not found' });
+    if (!['APPROVED', 'PARTIALLY_RECEIVED'].includes(po.status)) {
+      return res.status(400).json({ error: 'PO must be APPROVED or PARTIALLY_RECEIVED to receive goods' });
+    }
+
+    const workbook = new exceljs.Workbook();
+    await workbook.xlsx.readFile(req.file.path);
+    const worksheet = workbook.worksheets[0];
+    
+    const assetsToCreate = [];
+    const updates = [];
+
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return; // Skip header
+      // Assuming columns: 1=LineItemID, 2=ReceivedQty, 3=AssetTag, 4=SerialNumber
+      const lineItemId = row.getCell(1).value;
+      const receivedQty = row.getCell(2).value;
+      const assetTag = row.getCell(3).value;
+      const serialNumber = row.getCell(4).value;
+
+      if (!lineItemId || !receivedQty || !assetTag) return;
+
+      const lineItem = po.line_items.find(li => li.id === parseInt(lineItemId, 10));
+      if (!lineItem) throw new Error(`Line item ${lineItemId} not found in this PO`);
+
+      if (lineItem.received_qty + receivedQty > lineItem.quantity) {
+        throw new Error(`Cannot receive more than ordered for line item ${lineItemId}`);
+      }
+
+      // We will bulk create assets in inventory-service
+      assetsToCreate.push({
+        asset_tag: assetTag.toString(),
+        serial_number: serialNumber ? serialNumber.toString() : null,
+        category_id: lineItem.category_id,
+        po_id: poId,
+        type: 'PROCURED' // Using type as a fallback, but category_id is preferred
+      });
+
+      updates.push({ id: lineItem.id, received_qty: lineItem.received_qty + receivedQty });
+    });
+
+    // Send to inventory-service bulk create
+    const invRes = await fetch(`${INVENTORY_URL}/assets/bulk`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Request-ID': req.id,
+        'Authorization': req.headers.authorization
+      },
+      body: JSON.stringify({ assets: assetsToCreate })
+    });
+
+    if (!invRes.ok) {
+      const errData = await invRes.text();
+      throw new Error(`Inventory service failed to create assets: ${errData}`);
+    }
+
+    // Update PO Line Items and Status
+    await prisma.$transaction(async (tx) => {
+      for (const update of updates) {
+        await tx.pOLineItem.update({
+          where: { id: update.id },
+          data: { received_qty: update.received_qty }
+        });
+      }
+      
+      const updatedLines = await tx.pOLineItem.findMany({ where: { po_id: poId } });
+      const allReceived = updatedLines.every(li => li.received_qty === li.quantity);
+      
+      await tx.purchaseOrder.update({
+        where: { id: poId },
+        data: { status: allReceived ? 'COMPLETED' : 'PARTIALLY_RECEIVED' }
+      });
+    });
+
+    res.json({ message: 'Goods received successfully', assets_created: assetsToCreate.length });
+  } catch (error) {
+    req.log.error(error);
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -235,7 +500,7 @@ app.post('/purchase-orders/:id/approve', requireAuth, requireRole('ADMIN'), asyn
 
     const updatedPo = await prisma.purchaseOrder.update({
       where: { id: poId },
-      data: { status: 'APPROVED', budget: finalBudget || po.budget, idempotency_key: idempotencyKey, action_date: new Date() }
+      data: { status: 'APPROVED', idempotency_key: idempotencyKey, action_date: new Date() }
     });
 
     const responseBody = { message: 'Approved successfully', po: updatedPo };
@@ -385,6 +650,22 @@ app.post('/allocate', requireAuth, async (req, res) => {
     }
     req.log.error(e, 'Failed to proxy /allocate');
     res.status(503).json({ error: 'Inventory service unavailable' });
+  }
+});
+
+app.get('/assets/:id/timeline', requireAuth, async (req, res) => {
+  const assetId = parseInt(req.params.id, 10);
+  try {
+    const logs = await prisma.$queryRaw`
+      SELECT * FROM "AuditLog"
+      WHERE payload_json->>'asset_id' = ${assetId.toString()}
+         OR payload_json->>'assetId' = ${assetId.toString()}
+      ORDER BY created_at ASC
+    `;
+    res.json(logs);
+  } catch (err) {
+    req.log.error(err, 'Failed to fetch asset timeline');
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

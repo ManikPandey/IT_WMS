@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { StatusBadge, Button, Modal, useToast } from '../components/ui';
-import { Download, Upload, Plus, X, MoreVertical, AlertTriangle } from 'lucide-react';
+import { StatusBadge, Button, Modal, useToast, EmptyState, SkeletonRow } from '../components/ui';
+import { Download, Upload, Plus, X, AlertTriangle, Activity, Package } from 'lucide-react';
 
 export default function Inventory() {
   const queryClient = useQueryClient();
@@ -10,11 +10,14 @@ export default function Inventory() {
   
   const [isAllocateOpen, setIsAllocateOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
   const [isStatusOpen, setIsStatusOpen] = useState(false);
   const [isIssueOpen, setIsIssueOpen] = useState(false);
+  const [isTimelineOpen, setIsTimelineOpen] = useState(false);
   
   const [allocateForm, setAllocateForm] = useState({ assetType: 'LAPTOP', assignedTo: 1, warehouseId: 1 });
   const [createForm, setCreateForm] = useState({ asset_tag: '', serial_number: '', type: '', warehouse_id: 1, category_id: '' });
+  const [editForm, setEditForm] = useState({ asset_tag: '', serial_number: '', type: '', category_id: '' });
   const [properties, setProperties] = useState([]);
   
   const [search, setSearch] = useState('');
@@ -52,6 +55,16 @@ export default function Inventory() {
       const res = await fetch(`http://localhost:4000/assets?${params.toString()}`);
       return res.json();
     }
+  });
+
+  const { data: timelineData, isLoading: isTimelineLoading } = useQuery({
+    queryKey: ['timeline', selectedAsset?.id],
+    queryFn: async () => {
+      if (!selectedAsset) return [];
+      const res = await fetch(`http://localhost:3000/assets/${selectedAsset.id}/timeline`);
+      return res.json();
+    },
+    enabled: !!selectedAsset && isTimelineOpen
   });
 
   React.useEffect(() => {
@@ -100,6 +113,25 @@ export default function Inventory() {
       setIsCreateOpen(false);
       setProperties([]);
       setCreateForm({ asset_tag: '', serial_number: '', type: '', warehouse_id: 1, category_id: '' });
+    },
+    onError: (err) => showToast(err.message, 'error')
+  });
+
+  const editAssetMutation = useMutation({
+    mutationFn: async (data) => {
+      const res = await fetch(`http://localhost:4000/assets/${selectedAsset.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('Failed to edit asset');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['assets']);
+      showToast('Asset updated successfully');
+      setIsEditOpen(false);
+      setProperties([]);
     },
     onError: (err) => showToast(err.message, 'error')
   });
@@ -172,8 +204,8 @@ export default function Inventory() {
     <div className="flex gap-6 h-full">
       {/* Sidebar (Categories) */}
       <div className="w-64 flex-shrink-0 flex flex-col gap-4">
-        <h2 className="font-semibold text-lg">Categories</h2>
-        <div className="border border-border p-3 rounded-md space-y-2 bg-background text-sm">
+        <h2 className="font-semibold text-lg text-gray-900">Categories</h2>
+        <div className="bg-surface border border-border p-4 rounded-xl shadow-sm space-y-3">
           <input type="text" placeholder="New Category Name" className="w-full border border-border rounded-md px-2 py-1.5 focus:border-primary" value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} />
           <select className="w-full border border-border rounded-md px-2 py-1.5 focus:border-primary" value={newCategoryParent} onChange={e => setNewCategoryParent(e.target.value)}>
             <option value="">No Parent (Root)</option>
@@ -196,9 +228,9 @@ export default function Inventory() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 space-y-4">
+      <div className="flex-1 space-y-6">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-semibold">Asset Inventory</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Asset Inventory</h1>
           <div className="flex gap-2">
             {role === 'ADMIN' && (
               <>
@@ -207,8 +239,8 @@ export default function Inventory() {
                 <a href="http://localhost:4000/assets/export" download>
                   <Button variant="outline"><Download size={16} className="mr-2" /> Export</Button>
                 </a>
-                <Button onClick={() => setIsCreateOpen(true)}>Create Asset</Button>
-                <Button variant="outline" onClick={() => setIsAllocateOpen(true)}>Allocate Asset</Button>
+                <Button onClick={() => setIsCreateOpen(true)}><Plus size={16} className="mr-2" /> Create Asset</Button>
+                <Button variant="secondary" onClick={() => setIsAllocateOpen(true)}>Allocate Asset</Button>
               </>
             )}
           </div>
@@ -218,7 +250,7 @@ export default function Inventory() {
           <input 
             type="text" 
             placeholder="Search tags, type, serial..."
-            className="border border-border rounded-md px-3 py-2 text-sm w-64 focus:border-primary"
+            className="border border-border rounded-lg px-4 py-2.5 text-sm w-80 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-shadow outline-none shadow-sm bg-surface"
             value={search}
             onChange={e => { setCursor(null); setSearch(e.target.value); }}
           />
@@ -244,32 +276,71 @@ export default function Inventory() {
           ))}
         </div>
 
-        <div className="bg-background border border-border rounded-lg overflow-hidden">
-          <table className="w-full text-left text-sm text-text">
-            <thead className="bg-surface border-b border-border text-muted">
-              <tr>
-                <th className="px-6 py-4 font-medium">Asset Tag</th>
-                <th className="px-6 py-4 font-medium">Serial Number</th>
-                <th className="px-6 py-4 font-medium">Category</th>
-                <th className="px-6 py-4 font-medium">Status</th>
-                {role === 'ADMIN' && <th className="px-6 py-4 font-medium text-right">Actions</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading && !cursor ? (
-                <tr><td colSpan="5" className="px-6 py-8 text-center text-muted">Loading...</td></tr>
-              ) : !Array.isArray(assets) || assets.length === 0 ? (
-                <tr><td colSpan="5" className="px-6 py-8 text-center text-muted">No assets found.</td></tr>
-              ) : (
-                assets.map(asset => (
-                  <tr key={asset.id} className="border-b border-border last:border-0 hover:bg-surface/50 group">
+        <div className="bg-surface border border-border rounded-xl shadow-sm overflow-hidden relative">
+          <div className="overflow-auto max-h-[600px]">
+            <table className="w-full text-left text-sm text-text">
+              <thead className="bg-gray-50 border-b border-border text-gray-700 sticky top-0 z-10">
+                <tr>
+                  <th className="px-6 py-4 font-semibold">Asset Tag</th>
+                  <th className="px-6 py-4 font-semibold">Serial Number</th>
+                  <th className="px-6 py-4 font-semibold">Category</th>
+                  <th className="px-6 py-4 font-semibold">Status</th>
+                  {role === 'ADMIN' && <th className="px-6 py-4 font-semibold text-right">Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {isLoading && !cursor ? (
+                  <>
+                    <SkeletonRow columns={role === 'ADMIN' ? 5 : 4} />
+                    <SkeletonRow columns={role === 'ADMIN' ? 5 : 4} />
+                    <SkeletonRow columns={role === 'ADMIN' ? 5 : 4} />
+                  </>
+                ) : !Array.isArray(assets) || assets.length === 0 ? (
+                  <tr>
+                    <td colSpan={role === 'ADMIN' ? 5 : 4}>
+                      <EmptyState icon={Package} title="No assets found" description="There are no assets matching your current search or filters." />
+                    </td>
+                  </tr>
+                ) : (
+                  assets.map(asset => (
+                    <tr key={asset.id} className="border-b border-border last:border-0 hover:bg-gray-50 transition-colors group">
                     <td className="px-6 py-4 font-mono">{asset.asset_tag}</td>
                     <td className="px-6 py-4 font-mono">{asset.serial_number || '-'}</td>
                     <td className="px-6 py-4">{getCategoryName(asset.category_id)}</td>
                     <td className="px-6 py-4"><StatusBadge status={asset.status} /></td>
                     {role === 'ADMIN' && (
                       <td className="px-6 py-4 text-right">
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex justify-end gap-2">
+                          <button 
+                            onClick={() => {
+                              setSelectedAsset(asset);
+                              setEditForm({
+                                asset_tag: asset.asset_tag,
+                                serial_number: asset.serial_number || '',
+                                type: asset.type,
+                                category_id: asset.category_id || ''
+                              });
+                              const props = [];
+                              if (asset.jsonb_attributes) {
+                                for (const [k, v] of Object.entries(asset.jsonb_attributes)) {
+                                  props.push({ key: k, value: v });
+                                }
+                              }
+                              setProperties(props);
+                              setIsEditOpen(true);
+                            }}
+                            className="text-blue-500 hover:text-blue-600 px-2 flex items-center gap-1 inline-flex"
+                            title="Edit Asset"
+                          >
+                            Edit
+                          </button>
+                          <button 
+                            onClick={() => { setSelectedAsset(asset); setIsTimelineOpen(true); }}
+                            className="text-primary hover:text-primary/80 px-2 flex items-center gap-1 inline-flex"
+                            title="View Timeline"
+                          >
+                            <Activity size={16} /> Timeline
+                          </button>
                           {asset.status !== 'MAINTENANCE' && (
                             <button 
                               onClick={() => { setSelectedAsset(asset); setIsIssueOpen(true); }}
@@ -283,13 +354,14 @@ export default function Inventory() {
                       </td>
                     )}
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
           
           {hasNextPage && (
-            <div className="p-4 border-t border-border flex justify-center bg-surface/50">
+            <div className="p-4 border-t border-border flex justify-center bg-gray-50/50">
               <Button variant="secondary" onClick={() => setCursor(data.nextCursor)}>Load More</Button>
             </div>
           )}
@@ -334,6 +406,36 @@ export default function Inventory() {
           </form>
         </Modal>
 
+        {/* Edit Asset Modal */}
+        <Modal isOpen={isEditOpen} onClose={() => setIsEditOpen(false)} title="Edit Asset">
+          <form onSubmit={(e) => { e.preventDefault(); editAssetMutation.mutate({ ...editForm, category_id: editForm.category_id ? parseInt(editForm.category_id) : null, properties }); }} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div><label className="block text-sm mb-1">Asset Tag</label><input required className="w-full border rounded-md px-3 py-2 text-sm" value={editForm.asset_tag} onChange={e => setEditForm({...editForm, asset_tag: e.target.value})} /></div>
+              <div><label className="block text-sm mb-1">Serial Number</label><input className="w-full border rounded-md px-3 py-2 text-sm" value={editForm.serial_number} onChange={e => setEditForm({...editForm, serial_number: e.target.value})} /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div><label className="block text-sm mb-1">Type</label><input required className="w-full border rounded-md px-3 py-2 text-sm" value={editForm.type} onChange={e => setEditForm({...editForm, type: e.target.value})} /></div>
+              <div><label className="block text-sm mb-1">Category</label><select className="w-full border rounded-md px-3 py-2 text-sm" value={editForm.category_id} onChange={e => setEditForm({...editForm, category_id: e.target.value})}><option value="">None</option>{categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+            </div>
+            
+            {/* Dynamic Properties */}
+            <div>
+              <label className="block text-sm mb-2">Dynamic Properties (JSONB)</label>
+              <div className="space-y-2 mb-2">
+                {properties.map((p, i) => (
+                  <div key={i} className="flex gap-2">
+                    <input placeholder="Key" className="flex-1 border rounded-md px-3 py-1.5 text-sm" value={p.key} onChange={e => { const newP = [...properties]; newP[i].key = e.target.value; setProperties(newP); }} />
+                    <input placeholder="Value" className="flex-1 border rounded-md px-3 py-1.5 text-sm" value={p.value} onChange={e => { const newP = [...properties]; newP[i].value = e.target.value; setProperties(newP); }} />
+                    <button type="button" onClick={() => setProperties(properties.filter((_, idx) => idx !== i))} className="text-red-500 p-1"><X size={16} /></button>
+                  </div>
+                ))}
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={() => setProperties([...properties, {key: '', value: ''}])}>+ Add Field</Button>
+            </div>
+            <Button type="submit" className="w-full" disabled={editAssetMutation.isPending}>Save Changes</Button>
+          </form>
+        </Modal>
+
         {/* Report Issue Modal */}
         <Modal isOpen={isIssueOpen} onClose={() => setIsIssueOpen(false)} title="Report Issue">
           {selectedAsset && (
@@ -343,6 +445,45 @@ export default function Inventory() {
               <div><label className="block text-sm mb-1">Description</label><textarea required className="w-full border rounded-md px-3 py-2 text-sm" rows="3" value={issueForm.description} onChange={e => setIssueForm({...issueForm, description: e.target.value})} /></div>
               <Button type="submit" className="w-full" disabled={reportIssueMutation.isPending}>Submit Report</Button>
             </form>
+          )}
+        </Modal>
+
+        {/* Timeline Modal */}
+        <Modal isOpen={isTimelineOpen} onClose={() => setIsTimelineOpen(false)} title="Asset Timeline" size="lg">
+          {selectedAsset && (
+            <div className="space-y-6">
+              <div className="mb-4">
+                <h3 className="font-semibold text-lg">{selectedAsset.asset_tag}</h3>
+                <p className="text-sm text-muted">Serial: {selectedAsset.serial_number || 'N/A'}</p>
+              </div>
+
+              {isTimelineLoading ? (
+                <div className="text-center text-muted py-8">Loading timeline...</div>
+              ) : !timelineData || timelineData.length === 0 ? (
+                <div className="text-center text-muted py-8">No timeline events found.</div>
+              ) : (
+                <div className="relative pl-6 border-l-2 border-border space-y-6">
+                  {timelineData.map((event, idx) => (
+                    <div key={idx} className="relative">
+                      {/* Timeline dot */}
+                      <div className="absolute -left-[31px] w-4 h-4 rounded-full bg-primary ring-4 ring-background" />
+                      
+                      <div className="bg-surface rounded-lg p-4 border border-border shadow-sm">
+                        <div className="flex justify-between items-start mb-2">
+                          <span className="font-semibold text-text">{event.event_type}</span>
+                          <span className="text-xs text-muted">{new Date(event.created_at).toLocaleString()}</span>
+                        </div>
+                        {event.payload_json && (
+                          <div className="text-sm text-muted bg-background p-2 rounded border border-border overflow-auto max-h-32">
+                            <pre className="font-mono text-xs">{JSON.stringify(event.payload_json, null, 2)}</pre>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </Modal>
 

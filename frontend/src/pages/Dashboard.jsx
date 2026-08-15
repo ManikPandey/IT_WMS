@@ -5,7 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { Activity, Plus, Upload, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-const COLORS = ['#6366f1', '#a5b4fc', '#4338ca', '#3730a3', '#818cf8'];
+const COLORS = ['#4F46E5', '#6366F1', '#818CF8', '#A5B4FC', '#C7D2FE'];
 
 export default function Dashboard() {
   const token = localStorage.getItem('token');
@@ -75,7 +75,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-text">Overview Dashboard</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Overview Dashboard</h1>
         {health && (
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-border bg-surface text-sm">
             <div className={`w-2 h-2 rounded-full ${health.status === 'ok' ? 'bg-green-500' : 'bg-red-500'}`}></div>
@@ -105,8 +105,8 @@ export default function Dashboard() {
   
 
         {/* Stock Availability */}
-        <div className="bg-background border border-border rounded-lg p-6">
-          <h2 className="text-lg font-medium mb-4">Stock Availability</h2>
+        <div className="bg-surface border border-border rounded-xl p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">Stock Availability</h2>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -123,15 +123,15 @@ export default function Dashboard() {
         </div>
 
         {/* Procurement Spend */}
-        <div className="bg-background border border-border rounded-lg p-6 lg:col-span-2">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-medium">Financial Trends</h2>
-            <div className="flex border border-border rounded-md overflow-hidden">
+        <div className="bg-surface border border-border rounded-xl p-6 shadow-sm lg:col-span-2">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-lg font-semibold text-gray-800">Financial Trends</h2>
+            <div className="flex border border-border rounded-lg p-1 bg-gray-50">
               {['weekly', 'monthly', 'yearly'].map(r => (
                 <button 
                   key={r}
                   onClick={() => setRange(r)}
-                  className={`px-3 py-1 text-xs font-medium capitalize ${range === r ? 'bg-primary text-white' : 'bg-surface text-muted hover:text-text'}`}
+                  className={`px-4 py-1.5 text-xs font-semibold capitalize rounded-md transition-all ${range === r ? 'bg-white text-gray-900 shadow-sm' : 'text-muted hover:text-gray-900'}`}
                 >
                   {r}
                 </button>
@@ -147,8 +147,8 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                   <XAxis dataKey="period" tick={{fontSize: 12, fill: '#6b7280'}} axisLine={false} tickLine={false} />
                   <YAxis tick={{fontSize: 12, fill: '#6b7280'}} axisLine={false} tickLine={false} />
-                  <Tooltip cursor={{stroke: '#e5e7eb', strokeWidth: 2}} contentStyle={{borderRadius: '6px', border: '1px solid #e5e7eb'}} />
-                  <Line type="monotone" dataKey="spend" stroke="#4338ca" strokeWidth={2} dot={{r: 4, fill: '#4338ca'}} activeDot={{r: 6}} />
+                  <Tooltip cursor={{stroke: '#e5e7eb', strokeWidth: 2}} contentStyle={{borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                  <Line type="monotone" dataKey="spend" stroke="#4F46E5" strokeWidth={3} dot={{r: 4, fill: '#4F46E5'}} activeDot={{r: 6}} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -160,8 +160,8 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                   <XAxis dataKey="period" tick={{fontSize: 12, fill: '#6b7280'}} axisLine={false} tickLine={false} />
                   <YAxis tick={{fontSize: 12, fill: '#6b7280'}} axisLine={false} tickLine={false} />
-                  <Tooltip cursor={{stroke: '#e5e7eb', strokeWidth: 2}} contentStyle={{borderRadius: '6px', border: '1px solid #e5e7eb'}} />
-                  <Area type="monotone" dataKey="cost" stroke="#ef4444" fill="#fecaca" />
+                  <Tooltip cursor={{stroke: '#e5e7eb', strokeWidth: 2}} contentStyle={{borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                  <Area type="monotone" dataKey="cost" stroke="#818CF8" fill="#C7D2FE" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>

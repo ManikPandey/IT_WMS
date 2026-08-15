@@ -25,9 +25,10 @@ model Asset {
 }
 
 model Category {
-  id        Int        @id @default(autoincrement())
-  name      String     @unique
-  parent_id Int?
+  id               Int        @id @default(autoincrement())
+  name             String     @unique
+  parent_id        Int?
+  attribute_schema Json?
 }
 
 model MaintenanceTicket {
@@ -35,10 +36,11 @@ model MaintenanceTicket {
   asset_id    Int
   issue_type  String
   description String
-  status      String    @default("OPEN") // OPEN, RUNNING, CLOSED
+  status      String    @default("OPEN") // OPEN, RUNNING, PENDING_APPROVAL, CLOSED
   parts_used  String[]
   bill_url    String?
   cost        Float?
+  admin_note  String?
   created_at  DateTime  @default(now())
   resolved_at DateTime?
 }

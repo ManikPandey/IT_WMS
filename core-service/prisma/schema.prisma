@@ -19,7 +19,6 @@ model User {
 model PurchaseOrder {
   id                Int       @id @default(autoincrement())
   vendor            String
-  budget            Float
   status            String
   idempotency_key   String    @unique
   request_date      DateTime  @default(now())
@@ -30,7 +29,32 @@ model PurchaseOrder {
   delivery_address  String?
   receiving_office  String?
   custom_attributes Json?
+  document_url      String?
   created_at        DateTime  @default(now())
+  line_items        POLineItem[]
+}
+
+model POLineItem {
+  id            Int           @id @default(autoincrement())
+  po_id         Int
+  category_id   Int
+  description   String
+  quantity      Int
+  unit_price    Float
+  received_qty  Int           @default(0)
+  purchase_order PurchaseOrder @relation(fields: [po_id], references: [id], onDelete: Cascade)
+}
+
+model AssetRequest {
+  id             Int       @id @default(autoincrement())
+  requested_by   Int       // User ID
+  category_id    Int       // Category ID in inventory-service
+  justification  String
+  status         String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  approved_by    Int?      // User ID of Admin
+  resolved_at    DateTime?
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
 }
 
 model AuditLog {

@@ -15,9 +15,9 @@ export default function Settings() {
       </div>
 
       <div className="bg-background border border-border rounded-lg overflow-hidden flex flex-col flex-1">
-        <div className="border-b border-border flex bg-surface">
-          {['Audit Logs', 'Users', 'Data Management'].map(tab => {
-            if (tab === 'Users' && role !== 'ADMIN') return null; // hide Users tab for non-admins
+        <div className="border-b border-border flex bg-gray-50/50">
+          {['Audit Logs', 'Categories', 'Users', 'Data Management'].map(tab => {
+            if ((tab === 'Users' || tab === 'Categories') && role !== 'ADMIN') return null; // hide tabs for non-admins
             return (
               <button
                 key={tab}
@@ -32,6 +32,7 @@ export default function Settings() {
         
         <div className="p-6 flex-1 overflow-auto">
           {activeTab === 'Audit Logs' && <AuditLogsTab token={token} />}
+          {activeTab === 'Categories' && role === 'ADMIN' && <CategoriesTab token={token} />}
           {activeTab === 'Users' && role === 'ADMIN' && <UsersTab token={token} />}
           {activeTab === 'Data Management' && <DataManagementTab token={token} />}
         </div>
@@ -252,6 +253,138 @@ function DataManagementTab({ token }) {
         <Download size={16} className="mr-2" />
         {loading ? 'Exporting...' : 'Export All System Data'}
       </Button>
+    </div>
+  );
+}
+
+function CategoriesTab({ token }) {
+  const showToast = useToast();
+  const queryClient = useQueryClient();
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [form, setForm] = useState({ name: '', parent_id: '', attribute_schema: '' });
+
+  const { data: categories, isLoading } = useQuery({
+    queryKey: ['categories'],
+    queryFn: async () => {
+      const res = await fetch('http://localhost:3001/categories');
+      return res.json();
+    }
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (data) => {
+      const payload = {
+        name: data.name,
+        parent_id: data.parent_id ? parseInt(data.parent_id) : null,
+        attribute_schema: data.attribute_schema ? JSON.parse(data.attribute_schema) : {}
+      };
+      const res = await fetch('http://localhost:3001/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to create category');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['categories']);
+      showToast('Category created');
+      setIsCreateOpen(false);
+      setForm({ name: '', parent_id: '', attribute_schema: '' });
+    },
+    onError: (e) => showToast(e.message, 'error')
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id) => {
+      const res = await fetch(`http://localhost:3001/categories/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to delete category');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['categories']);
+      showToast('Category deleted');
+    },
+    onError: (e) => showToast(e.message, 'error')
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-lg font-semibold text-gray-800">Asset Categories</h2>
+        <Button onClick={() => setIsCreateOpen(true)} size="sm">Add Category</Button>
+      </div>
+
+      <div className="border border-border rounded-xl overflow-hidden shadow-sm relative">
+        <div className="overflow-auto max-h-[500px]">
+          <table className="w-full text-left text-sm text-text">
+            <thead className="bg-gray-50 border-b border-border text-gray-700 sticky top-0 z-10">
+              <tr>
+                <th className="px-6 py-4 font-semibold">ID</th>
+                <th className="px-6 py-4 font-semibold">Name</th>
+                <th className="px-6 py-4 font-semibold">Parent ID</th>
+                <th className="px-6 py-4 font-semibold">Attribute Schema</th>
+                <th className="px-6 py-4 font-semibold text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading ? (
+                <>
+                  <SkeletonRow columns={5} />
+                  <SkeletonRow columns={5} />
+                  <SkeletonRow columns={5} />
+                </>
+              ) : !Array.isArray(categories) || categories.length === 0 ? (
+                <tr>
+                  <td colSpan="5">
+                    <EmptyState icon={Activity} title="No categories found" description="There are no categories configured yet." />
+                  </td>
+                </tr>
+              ) : (
+                categories.map(cat => (
+                  <tr key={cat.id} className="border-b border-border last:border-0 hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4 font-mono text-muted">{cat.id}</td>
+                    <td className="px-6 py-4 font-medium">{cat.name}</td>
+                    <td className="px-6 py-4 text-muted">{cat.parent_id || '-'}</td>
+                    <td className="px-6 py-4">
+                      <pre className="text-xs bg-gray-50 p-2 rounded-lg max-w-[200px] overflow-x-auto border border-border">
+                        {JSON.stringify(cat.attribute_schema, null, 2)}
+                      </pre>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <Button variant="outline" size="sm" className="text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-200" onClick={() => {
+                        if (window.confirm('Are you sure you want to delete this category? Make sure it is empty.')) {
+                          deleteMutation.mutate(cat.id);
+                        }
+                      }}>
+                        Delete
+                      </Button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <Modal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} title="Create Category">
+        <form onSubmit={e => { e.preventDefault(); createMutation.mutate(form); }} className="space-y-4">
+          <div><label className="block text-sm mb-1">Name</label><input required className="w-full border border-border rounded-lg px-4 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none" value={form.name} onChange={e => setForm({...form, name: e.target.value})} /></div>
+          <div><label className="block text-sm mb-1">Parent ID (optional)</label><input type="number" className="w-full border border-border rounded-lg px-4 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none" value={form.parent_id} onChange={e => setForm({...form, parent_id: e.target.value})} /></div>
+          <div>
+            <label className="block text-sm mb-1">Attribute Schema (JSON)</label>
+            <textarea className="w-full border border-border rounded-lg px-4 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none h-32 font-mono" placeholder='{"brand": "string", "warranty_months": "number"}' value={form.attribute_schema} onChange={e => setForm({...form, attribute_schema: e.target.value})} />
+          </div>
+          <Button type="submit" className="w-full" disabled={createMutation.isPending}>Create</Button>
+        </form>
+      </Modal>
     </div>
   );
 }

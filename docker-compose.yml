@@ -13,6 +13,8 @@ services:
       POSTGRES_DB: core_db
     ports:
       - "5432:5432"
+    volumes:
+      - core_db_data:/var/lib/postgresql/data
 
   inventory_db:
     image: postgres:15-alpine
@@ -22,6 +24,8 @@ services:
       POSTGRES_DB: inventory_db
     ports:
       - "5433:5432"
+    volumes:
+      - inventory_db_data:/var/lib/postgresql/data
 
   inventory_service:
     build: 
@@ -50,3 +54,7 @@ services:
 
   # core_service omitted from this specific horizontal scaling test
   # as requested to focus solely on inventory-service scaling proof.
+
+volumes:
+  core_db_data:
+  inventory_db_data:

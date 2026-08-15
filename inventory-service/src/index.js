@@ -88,8 +88,28 @@ app.put('/categories/:id', async (req, res) => {
   res.json(category);
 });
 
+app.get('/categories/search', async (req, res) => {
+  const { q } = req.query;
+  if (!q) return res.json([]);
+  
+  const categories = await prisma.category.findMany({
+    where: { name: { contains: q, mode: 'insensitive' } }
+  });
+  res.json(categories);
+});
+
 app.delete('/categories/:id', async (req, res) => {
-  await prisma.category.delete({ where: { id: parseInt(req.params.id) } });
+  const id = parseInt(req.params.id, 10);
+  
+  // Check for subcategories
+  const subcats = await prisma.category.findFirst({ where: { parent_id: id } });
+  if (subcats) return res.status(409).json({ error: 'Cannot delete category with subcategories' });
+
+  // Check for assets
+  const assets = await prisma.asset.findFirst({ where: { category_id: id } });
+  if (assets) return res.status(409).json({ error: 'Cannot delete category containing assets' });
+
+  await prisma.category.delete({ where: { id } });
   res.json({ success: true });
 });
 
@@ -171,6 +191,58 @@ app.post('/assets', async (req, res) => {
     if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
     req.log.error(error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Bulk Create assets (For GRN)
+app.post('/assets/bulk', async (req, res) => {
+  try {
+    const { assets } = req.body;
+    if (!Array.isArray(assets) || assets.length === 0) {
+      return res.status(400).json({ error: 'Assets array is required' });
+    }
+    
+    // Default status to IN_STOCK or whatever is passed
+    const data = assets.map(a => ({
+      ...a,
+      status: a.status || 'IN_STOCK',
+      warehouse_id: a.warehouse_id || 1
+    }));
+
+    const result = await prisma.asset.createMany({ data });
+    res.json({ success: true, count: result.count });
+  } catch (error) {
+    req.log.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch('/assets/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { asset_tag, serial_number, type, category_id, properties } = req.body;
+    
+    const data = {};
+    if (asset_tag) data.asset_tag = asset_tag;
+    if (serial_number !== undefined) data.serial_number = serial_number;
+    if (type) data.type = type;
+    if (category_id !== undefined) data.category_id = category_id ? parseInt(category_id) : null;
+    
+    if (properties) {
+      data.jsonb_attributes = properties.reduce((acc, curr) => {
+        acc[curr.key] = curr.value;
+        return acc;
+      }, {});
+    }
+
+    const updated = await prisma.asset.update({
+      where: { id },
+      data
+    });
+    res.json(updated);
+  } catch (error) {
+    req.log.error(error);
+    res.status(500).json({ error: 'Failed to update asset' });
   }
 });
 
@@ -279,30 +351,50 @@ app.get('/maintenance', async (req, res) => {
   res.json(tickets);
 });
 
-app.patch('/maintenance/:id/resolve', async (req, res) => {
+app.patch('/maintenance/:id/submit-approval', async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { cost, parts_used, status: nextStatus } = req.body;
+    const { cost, parts_used } = req.body;
 
+    const ticket = await prisma.maintenanceTicket.update({
+      where: { id },
+      data: { 
+        status: 'PENDING_APPROVAL', 
+        cost,
+        parts_used: parts_used || []
+      }
+    });
+    res.json(ticket);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.patch('/maintenance/:id/approve', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
     const result = await prisma.$transaction(async (tx) => {
       const ticket = await tx.maintenanceTicket.update({
         where: { id },
-        data: { 
-          status: nextStatus || 'CLOSED', 
-          resolved_at: (!nextStatus || nextStatus === 'CLOSED') ? new Date() : null, 
-          cost,
-          parts_used: parts_used || []
-        }
+        data: { status: 'CLOSED', resolved_at: new Date(), admin_note: null }
       });
-      if (!nextStatus || nextStatus === 'CLOSED') {
-        await tx.asset.update({
-          where: { id: ticket.asset_id },
-          data: { status: 'IN_STOCK' }
-        });
-      }
+      await tx.asset.update({
+        where: { id: ticket.asset_id },
+        data: { status: 'IN_STOCK' }
+      });
       return ticket;
     });
     res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.patch('/maintenance/:id/reject', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { admin_note } = req.body;
+    const ticket = await prisma.maintenanceTicket.update({
+      where: { id },
+      data: { status: 'RUNNING', admin_note }
+    });
+    res.json(ticket);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
