@@ -95,9 +95,9 @@ describe('System Hardening: Concurrency & Saga', () => {
       data: {
         id: 9999,
         vendor: 'Saga Vendor',
-        budget: 100,
         status: 'APPROVED',
-        idempotency_key: 'saga-test-1'
+        idempotency_key: 'saga-test-1',
+        line_items: { create: [{ category_id: 1, description: 'Laptops', quantity: 5, unit_price: 1000 }] }
       }
     });
 

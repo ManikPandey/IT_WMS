@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { StatusBadge, Button, Modal, useToast, EmptyState, SkeletonRow } from '../components/ui';
-import { X, Search, ArrowUpDown, Plus, FileText } from 'lucide-react';
+import { X, Search, ArrowUpDown, Plus, FileText, Download } from 'lucide-react';
 
 export default function PurchaseOrders() {
   const queryClient = useQueryClient();

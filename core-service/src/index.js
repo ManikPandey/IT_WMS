@@ -502,7 +502,6 @@ app.post('/purchase-orders/:id/approve', requireAuth, requireRole('ADMIN'), asyn
   const idempotencyKey = req.headers['idempotency-key'];
   if (!idempotencyKey) return res.status(400).json({ error: 'Idempotency-Key header is required' });
 
-  const { finalBudget } = req.body;
   const bodyHash = crypto.createHash('sha256').update(JSON.stringify(req.body)).digest('hex');
   const cacheKey = `idem:${idempotencyKey}`;
 

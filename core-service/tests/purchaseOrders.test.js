@@ -45,8 +45,8 @@ describe('Purchase Orders API', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({
         vendor: 'Tech Supplier Inc.',
-        budget: 5000,
-        department: 'Engineering'
+        department: 'Engineering',
+        line_items: JSON.stringify([{ category_id: 1, description: 'Laptops', quantity: 5, unit_price: 1000 }])
       });
 
     expect(res.statusCode).toBe(201);
@@ -55,17 +55,16 @@ describe('Purchase Orders API', () => {
     poId = res.body.id;
   });
 
-  it('should fail validation when budget is negative', async () => {
+  it('should fail validation when line_items is missing', async () => {
     const res = await request(app)
       .post('/purchase-orders')
       .set('Authorization', `Bearer ${token}`)
       .send({
-        vendor: 'Invalid Supplier',
-        budget: -1000
+        vendor: 'Tech Supplier Inc.',
+        department: 'Engineering'
       });
 
     expect(res.statusCode).toBe(400);
-    console.log("Response body for negative budget:", res.body);
     expect(res.body.error).toBeDefined();
   });
 
@@ -81,7 +80,6 @@ describe('Purchase Orders API', () => {
 
     expect(res1.statusCode).toBe(200);
     expect(res1.body.po.status).toBe('APPROVED');
-    expect(res1.body.po.budget).toBe(4800);
 
     // Second request with same idempotency key
     const res2 = await request(app)

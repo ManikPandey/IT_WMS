@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { StatCard, Button } from '../components/ui';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area } from 'recharts';
 import { Activity, Plus, Upload, FileText } from 'lucide-react';
+import { fetchWithAuth } from '../utils/api';
 import { useNavigate } from 'react-router-dom';
 
 const COLORS = ['#4F46E5', '#6366F1', '#818CF8', '#A5B4FC', '#C7D2FE'];
@@ -16,9 +17,7 @@ export default function Dashboard() {
   const { data: invStats, isLoading: invLoading } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: async () => {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/dashboard/stats`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_URL}/dashboard/stats`);
       return res.json();
     },
     refetchInterval: 10000 // poll every 10s
@@ -27,9 +26,7 @@ export default function Dashboard() {
   const { data: procStats, isLoading: procLoading } = useQuery({
     queryKey: ['procurement-stats', range],
     queryFn: async () => {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/procurement/stats?range=${range}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_URL}/procurement/stats?range=${range}`);
       return res.json();
     }
   });
@@ -37,9 +34,7 @@ export default function Dashboard() {
   const { data: maintStats } = useQuery({
     queryKey: ['maintenance-stats', range],
     queryFn: async () => {
-      const res = await fetch(`${import.meta.env.VITE_INVENTORY_URL}/maintenance/stats?range=${range}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetchWithAuth(`${import.meta.env.VITE_INVENTORY_URL}/maintenance/stats?range=${range}`);
       return res.json();
     }
   });
