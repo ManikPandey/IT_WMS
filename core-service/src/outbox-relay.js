@@ -4,9 +4,12 @@ const Redis = require('ioredis');
 const prisma = new PrismaClient();
 const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
+let isRunning = false;
+
 async function relayEvents() {
+  isRunning = true;
   console.log('Core Outbox relay started...');
-  while (true) {
+  while (isRunning) {
     try {
       const events = await prisma.outboxEvent.findMany({
         where: { published: false },
@@ -28,12 +31,19 @@ async function relayEvents() {
         });
       }
 
-      await new Promise(res => setTimeout(res, 2000));
+      if (isRunning) await new Promise(res => setTimeout(res, 2000));
     } catch (err) {
       console.error('Error in outbox relay:', err);
-      await new Promise(res => setTimeout(res, 5000));
+      if (isRunning) await new Promise(res => setTimeout(res, 5000));
     }
   }
 }
 
-relayEvents();
+if (require.main === module) {
+  relayEvents();
+}
+
+module.exports = { 
+  start: () => relayEvents(), 
+  stop: () => { isRunning = false; }
+};

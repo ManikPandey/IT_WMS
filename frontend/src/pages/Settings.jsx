@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Modal, useToast, SkeletonRow, EmptyState } from '../components/ui';
-import { Download } from 'lucide-react';
+import { Download, Activity } from 'lucide-react';
 
 export default function Settings() {
   const token = localStorage.getItem('token');

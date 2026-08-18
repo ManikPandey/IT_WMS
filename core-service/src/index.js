@@ -334,7 +334,7 @@ app.post('/purchase-orders', requireAuth, requireRole('ADMIN'), upload.single('d
 
     res.status(201).json(po);
   } catch (error) {
-    if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
+    if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues });
     req.log.error(error);
     res.status(500).json({ error: 'Failed to create PO' });
   }

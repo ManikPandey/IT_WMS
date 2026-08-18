@@ -13,7 +13,7 @@ const INVENTORY_URL = process.env.INVENTORY_SERVICE_URL || 'http://localhost:300
 beforeAll(async () => {
   await prisma.purchaseOrder.deleteMany();
   await prisma.user.deleteMany();
-  require('../src/outbox-relay');
+  require('../src/outbox-relay').start();
   const bcrypt = require('bcryptjs');
   const password_hash = await bcrypt.hash('password123', 10);
   user = await prisma.user.create({
@@ -31,6 +31,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  require('../src/outbox-relay').stop();
   await prisma.$disconnect();
   redis.disconnect();
 });
