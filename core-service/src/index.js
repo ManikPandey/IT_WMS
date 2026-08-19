@@ -760,6 +760,29 @@ app.get('/system/export', requireAuth, requireRole('ADMIN'), async (req, res) =>
   }
 });
 
+app.post('/system/init', async (req, res) => {
+  try {
+    const userCount = await prisma.user.count();
+    if (userCount > 0) {
+      return res.status(403).json({ error: 'System already initialized' });
+    }
+    const password_hash = await bcrypt.hash('admin', 10);
+    const admin = await prisma.user.create({
+      data: {
+        username: 'admin',
+        name: 'System Admin',
+        email: 'admin@example.com',
+        password_hash,
+        role: 'ADMIN'
+      }
+    });
+    res.json({ message: 'Default admin user created successfully', admin });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin ONLY: seed initial categories and data
 app.post('/system/seed', requireAuth, requireRole('ADMIN'), async (req, res) => {
   try {
     const response = await fetch(`${INVENTORY_URL}/seed`, {

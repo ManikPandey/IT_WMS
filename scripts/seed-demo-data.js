@@ -36,6 +36,9 @@ async function fetchWithAuth(url, options = {}) {
 }
 
 async function login() {
+  console.log('Initializing system (creating default admin if none exists)...');
+  await fetch(`${API_URL}/system/init`, { method: 'POST' }).catch(() => {}); // Ignore error if already initialized
+
   console.log('Logging in as admin...');
   const res = await fetch(`${API_URL}/login`, {
     method: 'POST',
