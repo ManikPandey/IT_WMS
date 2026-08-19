@@ -21,15 +21,16 @@ export function setup() {
   
   // Login to get a token
   const loginRes = http.post(`${BASE_URL}/login`, JSON.stringify({
-    email: 'admin@example.com',
-    password: 'admin'
+    email: 'admin@test.com',
+    password: 'admin123'
   }), { headers: { 'Content-Type': 'application/json' } });
 
   let token = '';
   if (loginRes.status === 200) {
-    token = loginRes.json('token');
+    token = loginRes.json('token') || loginRes.json().token;
+    console.log(`Login successful. Token starts with: ${token.substring(0, 15)}...`);
   } else {
-    console.error('Failed to login for rate-limit test');
+    console.error(`Failed to login for rate-limit test. HTTP ${loginRes.status}: ${loginRes.body}`);
   }
 
   return { BASE_URL, token };

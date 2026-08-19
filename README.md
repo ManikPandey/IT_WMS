@@ -182,7 +182,7 @@ cd frontend && npm run dev
 - **Phase 0 (Week 1):** Schema design for both DBs + outbox table on paper. Docker Compose skeleton.
 - **Phase 1 (Weeks 2-3):** Build Inventory service alone. Implement Option A (Postgres locking). Prove correctness with concurrent test script.
 - **Phase 2 (Week 4):** Add Option B (Redis counter), benchmark both, write comparison doc.
-- **Phase 3 (Week 5):** Build Core service (Auth, PO approval + idempotency key).
+- **Phase 3 (Week 5):** Build Core service (Auth, PO approval + idempotency key). *(Note: In a production environment, you might hook this up to Azure AD, Okta, or Google Workspace for SSO, but for this project we are handling identity internally in the core-service Postgres DB).*
 - **Phase 4 (Week 6):** Wire up outbox → Redis Streams → audit log consumer.
 - **Phase 5 (Week 7):** React frontend + TanStack Query.
 - **Phase 5.6 (Week 8):** System Design Hardening (Circuit Breaker, Rate Limiting, CQRS, Event-Driven Sagas, Distributed Tracing).
@@ -247,27 +247,32 @@ To scientifically prove the zero-overselling guarantee (CP) and benchmark the ra
    npm run test:all
    ```
 
+
 #### Benchmark Results: Concurrency Control (100 VUs vs 50 Assets)
 
 ![Concurrency Allocation Load Test](./Assets/k6_allocation_test.png)
 
-| Metric | Option A: Postgres (`SKIP LOCKED`) | Option B: Redis Atomic Counter |
-|---|---|---|
-| **Successes (Expected 50)** | 50 | 50 |
-| **Failures (Expected 50)** | 50 | 50 |
-| **Overselling Occurred?** | **No** | **No** |
-| **p50 Latency** | 356.99 ms | 350.62 ms |
-| **p95 Latency** | 386.62 ms | 364.68 ms |
-| **p99 Latency** | 393.57 ms | 366.72 ms |
+*The following metrics compare raw local execution vs a live Render Free Tier deployment. The strict CP (zero-overselling) guarantee held perfectly in both environments.*
 
-*Conclusion:* Both methods successfully prevented overselling. The Redis Atomic Counter provided slightly more consistent tail latency (p95/p99) under heavy contention.
+| Metric | Local Postgres | Local Redis | Cloud Postgres (`SKIP LOCKED`) | Cloud Redis (Atomic) |
+|---|---|---|---|---|
+| **Successes (Expected 50)** | 50 | 50 | 50 | 50 |
+| **Failures (Expected 50)** | 50 | 50 | 50 | 50 |
+| **Overselling Occurred?** | **No** | **No** | **No** | **No** |
+| **p50 Latency** | 356.99 ms | 350.62 ms | 1.40s (1404.45ms) | 655.08 ms |
+| **p95 Latency** | 386.62 ms | 364.68 ms | 1.74s (1740.77ms) | 1.04s (1044.71ms) |
+| **p99 Latency** | 393.57 ms | 366.72 ms | 1.86s (1863.99ms) | 1.26s (1269.76ms) |
 
-#### Benchmark Results: Rate Limiting (60 requests burst)
+*Conclusion:* Both methods successfully prevented overselling. However, in the cloud environment, the **Redis Atomic Counter significantly outperformed Postgres**, processing requests twice as fast (655ms vs 1404ms p50 latency). This perfectly demonstrates the heavy overhead of Postgres row-level locking on a constrained cloud instance compared to lightweight in-memory Redis operations.
+
+#### Benchmark Results: Rate Limiting (60 requests burst across 10 VUs)
 
 ![Rate Limiter Test](./Assets/k6_ratelimit_test.png)
 
-| Metric | Result |
-|---|---|
-| **Requests Sent** | 60 |
-| **200 OK (Allowed)** | 50 |
-| **429 Too Many Requests** | 10 |
+| Metric | Local Execution | Cloud Execution (Render) |
+|---|---|---|
+| **Requests Sent** | 60 | 60 |
+| **200 OK (Allowed)** | 50 | 55 |
+| **429 Too Many Requests** | 10 | 5 |
+
+*Conclusion:* The Token Bucket algorithm cleanly rejected excess traffic. The cloud execution allowed 5 more requests (55 vs 50) because the inherent network latency of the cloud (~147ms per request) gave the bucket just enough time to naturally refill 5 new tokens during the burst window!
