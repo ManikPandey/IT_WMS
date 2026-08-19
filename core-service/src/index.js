@@ -766,12 +766,12 @@ app.post('/system/init', async (req, res) => {
     if (userCount > 0) {
       return res.status(403).json({ error: 'System already initialized' });
     }
-    const password_hash = await bcrypt.hash('admin', 10);
+    const password_hash = await bcrypt.hash('admin123', 10);
     const admin = await prisma.user.create({
       data: {
         username: 'admin',
         name: 'System Admin',
-        email: 'admin@example.com',
+        email: 'admin@test.com',
         password_hash,
         role: 'ADMIN'
       }

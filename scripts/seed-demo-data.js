@@ -43,7 +43,7 @@ async function login() {
   const res = await fetch(`${API_URL}/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'admin@example.com', password: 'admin' })
+    body: JSON.stringify({ email: 'admin@test.com', password: 'admin123' })
   });
   if (!res.ok) {
     const err = await res.text();
