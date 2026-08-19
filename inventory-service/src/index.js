@@ -458,7 +458,7 @@ app.post('/seed', async (req, res) => {
   const assetType = type || 'LAPTOP';
   
   await prisma.outboxEvent.deleteMany();
-  await prisma.asset.deleteMany();
+  await prisma.asset.deleteMany({ where: { type: assetType } });
   
   const assets = [];
   for (let i = 0; i < count; i++) {

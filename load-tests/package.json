@@ -1,0 +1,10 @@
+{
+  "name": "it-wms-load-tests",
+  "version": "1.0.0",
+  "scripts": {
+    "warmup": "node warmup.js",
+    "test:allocate": "k6 run k6-allocate.js",
+    "test:ratelimit": "k6 run k6-rate-limit.js",
+    "test:all": "npm run warmup && npm run test:allocate && npm run test:ratelimit"
+  }
+}

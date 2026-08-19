@@ -157,6 +157,7 @@ const rateLimiter = async (req, res, next) => {
   const key = `ratelimit:${req.user.id}`;
   const now = Date.now();
 
+  console.log('rateLimiter executed for user:', req.user.id);
   const script = `
     local key = KEYS[1]
     local capacity = tonumber(ARGV[1])
@@ -195,13 +196,12 @@ const rateLimiter = async (req, res, next) => {
       res.status(429).json({ error: 'Too Many Requests' });
     }
   } catch (err) {
+    console.error('RATE LIMITER LUA ERROR:', err);
     req.log.error(err, 'Rate limiter error');
     next(); // fail open
   }
 };
 
-app.use('/purchase-orders', rateLimiter);
-app.use('/dashboard/stats', rateLimiter);
 
 // 4. Endpoints
 
@@ -299,7 +299,7 @@ const CreatePOSchema = z.object({
   line_items: z.string() // Passed as JSON string: [{ category_id, description, quantity, unit_price }]
 });
 
-app.post('/purchase-orders', requireAuth, requireRole('ADMIN'), upload.single('document'), async (req, res) => {
+app.post('/purchase-orders', requireAuth, rateLimiter, requireRole('ADMIN'), upload.single('document'), async (req, res) => {
   try {
     const parsed = CreatePOSchema.parse(req.body);
     const lineItems = JSON.parse(parsed.line_items);
@@ -583,7 +583,7 @@ app.get('/audit-log', requireAuth, async (req, res) => {
 });
 
 // CQRS Dashboard Stats
-app.get('/dashboard/stats', requireAuth, async (req, res) => {
+app.get('/dashboard/stats', requireAuth, rateLimiter, async (req, res) => {
   try {
     const stats = await prisma.dashboardSummary.findUnique({ where: { id: 1 } });
     res.json(stats || { total_assets: 0, total_maintenance_cost: 0, active_issues: 0, in_stock_assets: 0, out_of_stock_assets: 0 });

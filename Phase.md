@@ -81,12 +81,9 @@ graph TD
 - **Distributed Tracing**: Enforced `X-Request-ID` propagation across HTTP headers and Redis Stream payloads for correlated logging.
 - **Horizontal Scaling Verification**: Dockerized all components and deployed a 3-replica load-balanced `inventory-service` using Nginx. Verified CP-guarantee with a 100-concurrent request load test confirming absolutely zero overselling.
 
----
-
-## Upcoming Phases
-
-### Phase 6: Deploy + Load Test
-- Containerize both Node.js services with `Dockerfile`s.
-- Deploy the databases (Neon Postgres) and Cache (Upstash Redis) to the cloud.
-- Deploy Backend services (e.g., Render) and Frontend (e.g., Vercel).
-- Execute `k6` load tests against the live deployment to prove zero-overselling concurrency safety.
+### Phase 6: Cloud Deployment & Live Load Testing
+- Configured CI/CD using GitHub Actions to automatically run Jest tests on `push` and `pull_request` events.
+- Deployed the databases (Postgres) and Cache (Redis) to the Render cloud.
+- Deployed Backend services on Render Web Services and Frontend on Vercel.
+- Executed `k6` load tests against the live deployment to prove zero-overselling concurrency safety, capturing p50, p95, p99 latencies for both pessimistic locking and atomic Redis counters.
+- Executed rate-limiting load test proving exactly 50 requests successfully pass while 10 are cleanly rejected with a 429 status code.

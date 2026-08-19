@@ -221,3 +221,48 @@ In a distributed environment, we must explicitly choose between Consistency and 
 - **AP (Available & Partition Tolerant) — Dashboard & Audit Logs**:
   The `GET /dashboard/stats` CQRS read model and the Audit Logs are eventually consistent. When a Purchase Order is approved, the UI immediately returns success (Availability). The Outbox Relay and Redis Streams consumer run asynchronously to update the read models. 
   *Maximum Staleness*: Typically < 50ms under normal load, bounded by the Outbox polling interval. If the stream consumer crashes, the system remains fully available for writes, and the read model simply falls behind until the consumer recovers and processes the pending queue.
+
+---
+
+### Load Testing & Performance Verification
+
+To scientifically prove the zero-overselling guarantee (CP) and benchmark the rate limiter, we run concurrent k6 load tests against the live deployment.
+
+#### Running the Tests
+
+1. Navigate to the `load-tests/` directory: `cd load-tests`
+2. Install dependencies (if you haven't globally): `npm install`
+3. Export your live API URLs (replace with your actual Render URLs):
+   ```bash
+   export API_URL=https://your-core-service.onrender.com
+   export INVENTORY_URL=https://your-inventory-service.onrender.com
+   ```
+4. Run the full suite (Warmup -> Allocation Tests -> Rate Limit Test):
+   ```bash
+   npm run test:all
+   ```
+
+#### Benchmark Results: Concurrency Control (100 VUs vs 50 Assets)
+
+![Concurrency Allocation Load Test](./Assets/k6_allocation_test.png)
+
+| Metric | Option A: Postgres (`SKIP LOCKED`) | Option B: Redis Atomic Counter |
+|---|---|---|
+| **Successes (Expected 50)** | 50 | 50 |
+| **Failures (Expected 50)** | 50 | 50 |
+| **Overselling Occurred?** | **No** | **No** |
+| **p50 Latency** | 356.99 ms | 350.62 ms |
+| **p95 Latency** | 386.62 ms | 364.68 ms |
+| **p99 Latency** | 393.57 ms | 366.72 ms |
+
+*Conclusion:* Both methods successfully prevented overselling. The Redis Atomic Counter provided slightly more consistent tail latency (p95/p99) under heavy contention.
+
+#### Benchmark Results: Rate Limiting (60 requests burst)
+
+![Rate Limiter Test](./Assets/k6_ratelimit_test.png)
+
+| Metric | Result |
+|---|---|
+| **Requests Sent** | 60 |
+| **200 OK (Allowed)** | 50 |
+| **429 Too Many Requests** | 10 |
