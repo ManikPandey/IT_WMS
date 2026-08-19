@@ -87,6 +87,8 @@ if (remaining < 0) {
 
 **Proof of correctness:** write a Node script (or k6 script) that fires 100 concurrent allocation requests against a pool of 50 assets. Screenshot/graph the result: exactly 50 succeed, 50 fail cleanly, zero overselling, zero deadlocks. This graph goes in your README.
 
+*New in Phase 5.9:* The frontend now includes a dedicated **Live Concurrency Demo** page (`/concurrency-demo`) that visually runs this exact scenario directly from the browser. It resets the database, seeds 50 assets, and fires 100 asynchronous JavaScript `fetch` requests via `Promise.all()`. Users can watch the progress bar fill up in real-time as requests resolve to `200 OK` or `409 Out of Stock`, providing a powerful, interactive visual proof of the backend locking mechanisms.
+
 ---
 
 ## 5. Event Flow & the Outbox Pattern (avoiding the dual-write bug)
@@ -184,6 +186,7 @@ cd frontend && npm run dev
 - **Phase 4 (Week 6):** Wire up outbox → Redis Streams → audit log consumer.
 - **Phase 5 (Week 7):** React frontend + TanStack Query.
 - **Phase 5.6 (Week 8):** System Design Hardening (Circuit Breaker, Rate Limiting, CQRS, Event-Driven Sagas, Distributed Tracing).
+- **Phase 5.9 (Week 8.5):** Final Polish & Demo UI (Optimistic Updates, Dark Mode, UI Concurrency Simulation).
 - **Phase 6 (Week 9):** Dockerize everything, load balance with Nginx, deploy free tier, k6 load test, generate graphs for README.
 
 ---

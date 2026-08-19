@@ -82,7 +82,7 @@ export default function AssetRequests() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Asset Requests</h1>
+        <h1 className="text-2xl font-bold text-text">Asset Requests</h1>
         {!isAdmin && (
           <Button onClick={() => setIsModalOpen(true)}>Request Asset</Button>
         )}
@@ -91,7 +91,7 @@ export default function AssetRequests() {
       <div className="bg-surface border border-border rounded-xl shadow-sm overflow-hidden relative">
         <div className="overflow-auto max-h-[600px]">
           <table className="w-full text-left text-sm text-text">
-            <thead className="bg-gray-50 border-b border-border text-gray-700 sticky top-0 z-10">
+            <thead className="bg-background border-b border-border text-muted sticky top-0 z-10">
               <tr>
                 <th className="px-6 py-4 font-semibold">ID</th>
                 <th className="px-6 py-4 font-semibold">Category</th>
@@ -116,7 +116,7 @@ export default function AssetRequests() {
                 </tr>
               ) : (
                 requests.map(req => (
-                  <tr key={req.id} className="border-b border-border last:border-0 hover:bg-gray-50 transition-colors group">
+                  <tr key={req.id} className="border-b border-border last:border-0 hover:bg-background transition-colors group">
                     <td className="px-6 py-4 font-mono">REQ-{req.id}</td>
                     <td className="px-6 py-4">{getCategoryName(req.category_id)}</td>
                     <td className="px-6 py-4 max-w-xs truncate">{req.justification}</td>

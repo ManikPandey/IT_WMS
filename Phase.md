@@ -87,3 +87,8 @@ graph TD
 - Deployed Backend services on Render Web Services and Frontend on Vercel.
 - Executed `k6` load tests against the live deployment to prove zero-overselling concurrency safety, capturing p50, p95, p99 latencies for both pessimistic locking and atomic Redis counters.
 - Executed rate-limiting load test proving exactly 50 requests successfully pass while 10 are cleanly rejected with a 429 status code.
+
+### Phase 5.9: Final Polish & Demo UI
+- **Optimistic Updates**: Integrated TanStack Query `onMutate` for instantaneous UI feedback on asset allocations and PO approvals, rolling back seamlessly on error.
+- **Dark Mode**: Configured CSS variables mapped to Tailwind configuration to support a seamless, system-respecting dark theme toggle across all pages.
+- **Live Concurrency Demo**: Created a dedicated visual dashboard (`/concurrency-demo`) for administrators to fire 100 concurrent allocation requests from the frontend, visually demonstrating the Opossum Circuit Breaker and backend concurrency logic in real-time.

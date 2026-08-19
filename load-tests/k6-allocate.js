@@ -30,19 +30,36 @@ export const options = {
 };
 
 export function setup() {
-  const BASE_URL = __ENV.INVENTORY_URL || 'http://localhost:3001';
+  const INVENTORY_URL = __ENV.INVENTORY_URL || 'http://localhost:3001';
+  const API_URL = __ENV.API_URL || 'http://localhost:3000';
+
+  const loginRes = http.post(`${API_URL}/login`, JSON.stringify({
+    email: 'admin@example.com',
+    password: 'admin'
+  }), { headers: { 'Content-Type': 'application/json' } });
+  
+  let token = '';
+  if (loginRes.status === 200) {
+    token = loginRes.json('token');
+  } else {
+    console.error('Failed to login for allocate test');
+  }
+
+  const BASE_URL = INVENTORY_URL;
 
   console.log('Seeding 50 assets for Postgres test...');
   let resPg = http.post(`${BASE_URL}/seed`, JSON.stringify({ type: 'LAPTOP_PG', count: 50 }), {
-    headers: { 'Content-Type': 'application/json' }
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
   });
+  if (resPg.status !== 200) console.error('Failed to seed Postgres test data:', resPg.body);
 
   console.log('Seeding 50 assets for Redis test...');
   let resRd = http.post(`${BASE_URL}/seed`, JSON.stringify({ type: 'LAPTOP_RD', count: 50 }), {
-    headers: { 'Content-Type': 'application/json' }
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
   });
+  if (resRd.status !== 200) console.error('Failed to seed Redis test data:', resRd.body);
 
-  return { BASE_URL };
+  return { BASE_URL, token };
 }
 
 export default function (data) {

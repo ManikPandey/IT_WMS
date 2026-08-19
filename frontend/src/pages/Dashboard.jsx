@@ -70,7 +70,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Overview Dashboard</h1>
+        <h1 className="text-2xl font-bold text-text">Overview Dashboard</h1>
         {health && (
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-border bg-surface text-sm">
             <div className={`w-2 h-2 rounded-full ${health.status === 'ok' ? 'bg-green-500' : 'bg-red-500'}`}></div>
@@ -101,7 +101,7 @@ export default function Dashboard() {
 
         {/* Stock Availability */}
         <div className="bg-surface border border-border rounded-xl p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Stock Availability</h2>
+          <h2 className="text-lg font-semibold text-muted mb-4">Stock Availability</h2>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -120,13 +120,13 @@ export default function Dashboard() {
         {/* Procurement Spend */}
         <div className="bg-surface border border-border rounded-xl p-6 shadow-sm lg:col-span-2">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-semibold text-gray-800">Financial Trends</h2>
-            <div className="flex border border-border rounded-lg p-1 bg-gray-50">
+            <h2 className="text-lg font-semibold text-muted">Financial Trends</h2>
+            <div className="flex border border-border rounded-lg p-1 bg-background">
               {['weekly', 'monthly', 'yearly'].map(r => (
                 <button 
                   key={r}
                   onClick={() => setRange(r)}
-                  className={`px-4 py-1.5 text-xs font-semibold capitalize rounded-md transition-all ${range === r ? 'bg-white text-gray-900 shadow-sm' : 'text-muted hover:text-gray-900'}`}
+                  className={`px-4 py-1.5 text-xs font-semibold capitalize rounded-md transition-all ${range === r ? 'bg-surface text-text shadow-sm' : 'text-muted hover:text-text'}`}
                 >
                   {r}
                 </button>

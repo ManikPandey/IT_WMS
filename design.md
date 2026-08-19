@@ -78,6 +78,15 @@ Design Tokens
   --spacing-lg: 32px;
 }
 
+[data-theme='dark'] {
+  --color-primary: #818cf8;
+  --color-background: #0a0a0a;
+  --color-surface: #171717;
+  --color-text: #f5f5f5;
+  --color-muted: #a3a3a3;
+  --color-border: #262626;
+}
+
 Screen Specifications
 Overview Dashboard
 Purpose: Provide immediate situational awareness of IT assets and procurement blocks.

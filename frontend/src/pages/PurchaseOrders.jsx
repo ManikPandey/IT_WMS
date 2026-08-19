@@ -141,7 +141,8 @@ export default function PurchaseOrders() {
 
   const approveMutation = useMutation({
     mutationFn: async (id) => {
-      const idemKey = `idem-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`; 
+      // Intentionally using a single token per session for testing idempotency on duplicate rapid clicks
+      const idemKey = `idem-${id}-${Math.floor(Date.now() / 10000)}`; 
       const res = await fetch(`${import.meta.env.VITE_API_URL}/purchase-orders/${id}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'Idempotency-Key': idemKey },
@@ -150,8 +151,28 @@ export default function PurchaseOrders() {
       if (!res.ok) throw new Error(res.status === 409 ? 'Duplicate request conflict' : 'Approval failed');
       return res.json();
     },
-    onSuccess: () => { queryClient.invalidateQueries(['pos']); showToast('PO approved'); },
-    onError: (err) => showToast(err.message, 'error')
+    onMutate: async (id) => {
+      await queryClient.cancelQueries(['pos']);
+      const previousPOs = queryClient.getQueryData(['pos']);
+      queryClient.setQueryData(['pos'], old => {
+        if (!old || !old.data) return old;
+        return {
+          ...old,
+          data: old.data.map(po => po.id === id ? { ...po, status: 'APPROVED' } : po)
+        };
+      });
+      return { previousPOs };
+    },
+    onError: (err, id, context) => {
+      queryClient.setQueryData(['pos'], context.previousPOs);
+      showToast(err.message + ' (Rolled back UI)', 'error');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries(['pos']);
+    },
+    onSuccess: () => { 
+      showToast('PO approved'); 
+    }
   });
 
   const rejectMutation = useMutation({
@@ -163,14 +184,34 @@ export default function PurchaseOrders() {
       if (!res.ok) throw new Error('Rejection failed');
       return res.json();
     },
-    onSuccess: () => { queryClient.invalidateQueries(['pos']); showToast('PO rejected & assets reverted'); },
-    onError: (err) => showToast(err.message, 'error')
+    onMutate: async (id) => {
+      await queryClient.cancelQueries(['pos']);
+      const previousPOs = queryClient.getQueryData(['pos']);
+      queryClient.setQueryData(['pos'], old => {
+        if (!old || !old.data) return old;
+        return {
+          ...old,
+          data: old.data.map(po => po.id === id ? { ...po, status: 'REJECTED' } : po)
+        };
+      });
+      return { previousPOs };
+    },
+    onError: (err, id, context) => {
+      queryClient.setQueryData(['pos'], context.previousPOs);
+      showToast(err.message + ' (Rolled back UI)', 'error');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries(['pos']);
+    },
+    onSuccess: () => { 
+      showToast('PO rejected & assets reverted'); 
+    }
   });
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Purchase Orders</h1>
+        <h1 className="text-2xl font-bold text-text">Purchase Orders</h1>
         {role === 'ADMIN' && (
           <div className="space-x-2">
             <Button onClick={() => { setGrnPoId(''); setIsGrnOpen(true); }} variant="outline">
@@ -201,7 +242,7 @@ export default function PurchaseOrders() {
       <div className="bg-surface border border-border rounded-xl shadow-sm overflow-hidden relative">
         <div className="overflow-auto max-h-[600px]">
           <table className="w-full text-left text-sm text-text">
-            <thead className="bg-gray-50 border-b border-border text-gray-700 sticky top-0 z-10">
+            <thead className="bg-background border-b border-border text-muted sticky top-0 z-10">
               <tr>
                 <th className="px-6 py-4 font-semibold">PO ID</th>
                 <th className="px-6 py-4 font-semibold">Vendor</th>
@@ -227,7 +268,7 @@ export default function PurchaseOrders() {
                 </tr>
               ) : (
                 pos.map(po => (
-                  <tr key={po.id} className="border-b border-border last:border-0 hover:bg-gray-50 transition-colors group">
+                  <tr key={po.id} className="border-b border-border last:border-0 hover:bg-background transition-colors group">
                   <td className="px-6 py-4 font-mono">PO-{po.id}</td>
                   <td className="px-6 py-4">{po.vendor}</td>
                   <td className="px-6 py-4">{po.department || '-'}</td>
@@ -260,7 +301,7 @@ export default function PurchaseOrders() {
         </div>
         
         {hasNextPage && (
-          <div className="p-4 border-t border-border flex justify-center bg-gray-50/50">
+          <div className="p-4 border-t border-border flex justify-center bg-background/50">
             <Button variant="secondary" onClick={() => setCursor(data.nextCursor)}>Load More</Button>
           </div>
         )}

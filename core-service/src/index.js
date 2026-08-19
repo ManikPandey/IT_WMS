@@ -658,7 +658,8 @@ const fetchInventoryAllocate = async (payload, reqId) => {
 const allocateBreaker = new CircuitBreaker(fetchInventoryAllocate, {
   timeout: 6000,
   errorThresholdPercentage: 50,
-  resetTimeout: 10000
+  resetTimeout: 10000,
+  errorFilter: (err) => err.message.startsWith('409:')
 });
 
 app.post('/allocate', requireAuth, async (req, res) => {
@@ -728,6 +729,25 @@ app.get('/system/export', requireAuth, requireRole('ADMIN'), async (req, res) =>
     res.send(JSON.stringify(combined, null, 2));
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/system/seed', requireAuth, requireRole('ADMIN'), async (req, res) => {
+  try {
+    const response = await fetch(`${INVENTORY_URL}/seed`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': req.headers.authorization
+      },
+      body: JSON.stringify(req.body)
+    });
+    const data = await response.json();
+    if (!response.ok) return res.status(response.status).json(data);
+    res.json(data);
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: 'Failed to proxy seed request' });
   }
 });
 

@@ -5,6 +5,7 @@ const cors = require('cors');
 const multer = require('multer');
 const ExcelJS = require('exceljs');
 const cloudinary = require('cloudinary').v2;
+const jwt = require('jsonwebtoken');
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const helmet = require('helmet');
 const pino = require('pino');
@@ -13,7 +14,8 @@ const swaggerUi = require('swagger-ui-express');
 const crypto = require('crypto');
 const { z } = require('zod');
 const { generateSpec } = require('./swagger');
-require('dotenv').config({ path: '../.env' }); // Load from root
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../../.env') }); // Load from root
 
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 cloudinary.config({
@@ -33,6 +35,30 @@ const cloudUpload = multer({ storage: storage });
 const app = express();
 const prisma = new PrismaClient();
 const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
+
+const requireAuth = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: 'Missing Authorization header' });
+  
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(403).json({ error: 'Invalid token' });
+  }
+};
+
+const requireRole = (roles) => (req, res, next) => {
+  const allowedRoles = Array.isArray(roles) ? roles : [roles];
+  if (!allowedRoles.includes(req.user.role)) {
+    return res.status(403).json({ error: `Forbidden: Requires one of ${allowedRoles.join(', ')}` });
+  }
+  next();
+};
 
 app.use(express.json());
 app.use(helmet());
@@ -448,12 +474,7 @@ app.get('/maintenance/stats', async (req, res) => {
 });
 
 // Seed endpoint for testing
-app.post('/seed', async (req, res) => {
-  console.log("ENABLE_SEED is:", process.env.ENABLE_SEED);
-  if (process.env.ENABLE_SEED !== 'true') {
-    return res.status(403).json({ error: 'Seed endpoint is disabled in this environment' });
-  }
-
+app.post('/seed', requireAuth, requireRole('ADMIN'), async (req, res) => {
   const { type, count } = req.body;
   const assetType = type || 'LAPTOP';
   

@@ -136,17 +136,17 @@ export default function Maintenance() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Maintenance Portal</h1>
+        <h1 className="text-2xl font-bold text-text">Maintenance Portal</h1>
       </div>
 
       <div className="bg-surface border border-border rounded-xl p-6 shadow-sm">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-lg font-semibold text-gray-800">Cost Trend</h2>
-          <div className="flex border border-border rounded-lg p-1 bg-gray-50">
+          <h2 className="text-lg font-semibold text-muted">Cost Trend</h2>
+          <div className="flex border border-border rounded-lg p-1 bg-background">
             {['weekly', 'monthly', 'yearly'].map(r => (
               <button 
                 key={r} onClick={() => setRange(r)}
-                className={`px-4 py-1.5 text-xs font-semibold capitalize rounded-md transition-all ${range === r ? 'bg-white text-gray-900 shadow-sm' : 'text-muted hover:text-gray-900'}`}
+                className={`px-4 py-1.5 text-xs font-semibold capitalize rounded-md transition-all ${range === r ? 'bg-surface text-text shadow-sm' : 'text-muted hover:text-text'}`}
               >
                 {r}
               </button>
@@ -173,7 +173,7 @@ export default function Maintenance() {
       </div>
 
       <div className="bg-surface border border-border rounded-xl shadow-sm overflow-hidden flex flex-col">
-        <div className="border-b border-border flex bg-gray-50/50">
+        <div className="border-b border-border flex bg-background/50">
           {['OPEN', 'RUNNING', 'PENDING_APPROVAL', 'CLOSED', 'ALL'].map(tab => (
             <button
               key={tab}
@@ -187,7 +187,7 @@ export default function Maintenance() {
 
         <div className="overflow-auto max-h-[600px]">
           <table className="w-full text-left text-sm text-text">
-            <thead className="bg-gray-50 border-b border-border text-gray-700 sticky top-0 z-10">
+            <thead className="bg-background border-b border-border text-muted sticky top-0 z-10">
               <tr>
                 <th className="px-6 py-4 font-semibold">Date</th>
                 <th className="px-6 py-4 font-semibold">Asset ID</th>
@@ -213,7 +213,7 @@ export default function Maintenance() {
                 </tr>
               ) : (
                 tickets.map(ticket => (
-                  <tr key={ticket.id} className="border-b border-border last:border-0 hover:bg-gray-50 transition-colors group">
+                  <tr key={ticket.id} className="border-b border-border last:border-0 hover:bg-background transition-colors group">
                   <td className="px-6 py-4 whitespace-nowrap">{new Date(ticket.created_at).toLocaleDateString()}</td>
                   <td className="px-6 py-4 font-mono">AST-{ticket.asset_id}</td>
                   <td className="px-6 py-4">{ticket.issue_type}</td>

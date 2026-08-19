@@ -15,7 +15,7 @@ export default function Settings() {
       </div>
 
       <div className="bg-background border border-border rounded-lg overflow-hidden flex flex-col flex-1">
-        <div className="border-b border-border flex bg-gray-50/50">
+        <div className="border-b border-border flex bg-background/50">
           {['Audit Logs', 'Categories', 'Users', 'Data Management'].map(tab => {
             if ((tab === 'Users' || tab === 'Categories') && role !== 'ADMIN') return null; // hide tabs for non-admins
             return (
@@ -317,14 +317,14 @@ function CategoriesTab({ token }) {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-lg font-semibold text-gray-800">Asset Categories</h2>
+        <h2 className="text-lg font-semibold text-muted">Asset Categories</h2>
         <Button onClick={() => setIsCreateOpen(true)} size="sm">Add Category</Button>
       </div>
 
       <div className="border border-border rounded-xl overflow-hidden shadow-sm relative">
         <div className="overflow-auto max-h-[500px]">
           <table className="w-full text-left text-sm text-text">
-            <thead className="bg-gray-50 border-b border-border text-gray-700 sticky top-0 z-10">
+            <thead className="bg-background border-b border-border text-muted sticky top-0 z-10">
               <tr>
                 <th className="px-6 py-4 font-semibold">ID</th>
                 <th className="px-6 py-4 font-semibold">Name</th>
@@ -348,12 +348,12 @@ function CategoriesTab({ token }) {
                 </tr>
               ) : (
                 categories.map(cat => (
-                  <tr key={cat.id} className="border-b border-border last:border-0 hover:bg-gray-50 transition-colors">
+                  <tr key={cat.id} className="border-b border-border last:border-0 hover:bg-background transition-colors">
                     <td className="px-6 py-4 font-mono text-muted">{cat.id}</td>
                     <td className="px-6 py-4 font-medium">{cat.name}</td>
                     <td className="px-6 py-4 text-muted">{cat.parent_id || '-'}</td>
                     <td className="px-6 py-4">
-                      <pre className="text-xs bg-gray-50 p-2 rounded-lg max-w-[200px] overflow-x-auto border border-border">
+                      <pre className="text-xs bg-background p-2 rounded-lg max-w-[200px] overflow-x-auto border border-border">
                         {JSON.stringify(cat.attribute_schema, null, 2)}
                       </pre>
                     </td>

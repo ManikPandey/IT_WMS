@@ -152,12 +152,34 @@ export default function Inventory() {
       }
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries(['assets']);
-      showToast('Asset allocated successfully');
-      setIsAllocateOpen(false);
+    onMutate: async (newAllocation) => {
+      await queryClient.cancelQueries(['assets']);
+      const previousAssets = queryClient.getQueryData(['assets']);
+      
+      // Optimistically update the first available asset of the requested type
+      queryClient.setQueryData(['assets'], old => {
+        if (!old || !old.assets) return old;
+        const newAssets = [...old.assets];
+        const targetIndex = newAssets.findIndex(a => a.type === newAllocation.asset_type && a.status === 'IN_STOCK');
+        if (targetIndex !== -1) {
+          newAssets[targetIndex] = { ...newAssets[targetIndex], status: 'ALLOCATED' };
+        }
+        return { ...old, assets: newAssets };
+      });
+      
+      setIsAllocateOpen(false); // Optimistically close modal
+      return { previousAssets };
     },
-    onError: (err) => showToast(err.message, 'error')
+    onError: (err, newAllocation, context) => {
+      queryClient.setQueryData(['assets'], context.previousAssets);
+      showToast(err.message + ' (Rolled back UI)', 'error');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries(['assets']);
+    },
+    onSuccess: () => {
+      showToast('Asset allocated successfully');
+    }
   });
 
   const reportIssueMutation = useMutation({
@@ -204,7 +226,7 @@ export default function Inventory() {
     <div className="flex gap-6 h-full">
       {/* Sidebar (Categories) */}
       <div className="w-64 flex-shrink-0 flex flex-col gap-4">
-        <h2 className="font-semibold text-lg text-gray-900">Categories</h2>
+        <h2 className="font-semibold text-lg text-text">Categories</h2>
         <div className="bg-surface border border-border p-4 rounded-xl shadow-sm space-y-3">
           <input type="text" placeholder="New Category Name" className="w-full border border-border rounded-md px-2 py-1.5 focus:border-primary" value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} />
           <select className="w-full border border-border rounded-md px-2 py-1.5 focus:border-primary" value={newCategoryParent} onChange={e => setNewCategoryParent(e.target.value)}>
@@ -230,7 +252,7 @@ export default function Inventory() {
       {/* Main Content */}
       <div className="flex-1 space-y-6">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900">Asset Inventory</h1>
+          <h1 className="text-2xl font-bold text-text">Asset Inventory</h1>
           <div className="flex gap-2">
             {role === 'ADMIN' && (
               <>
@@ -279,7 +301,7 @@ export default function Inventory() {
         <div className="bg-surface border border-border rounded-xl shadow-sm overflow-hidden relative">
           <div className="overflow-auto max-h-[600px]">
             <table className="w-full text-left text-sm text-text">
-              <thead className="bg-gray-50 border-b border-border text-gray-700 sticky top-0 z-10">
+              <thead className="bg-background border-b border-border text-muted sticky top-0 z-10">
                 <tr>
                   <th className="px-6 py-4 font-semibold">Asset Tag</th>
                   <th className="px-6 py-4 font-semibold">Serial Number</th>
@@ -303,7 +325,7 @@ export default function Inventory() {
                   </tr>
                 ) : (
                   assets.map(asset => (
-                    <tr key={asset.id} className="border-b border-border last:border-0 hover:bg-gray-50 transition-colors group">
+                    <tr key={asset.id} className="border-b border-border last:border-0 hover:bg-background transition-colors group">
                     <td className="px-6 py-4 font-mono">{asset.asset_tag}</td>
                     <td className="px-6 py-4 font-mono">{asset.serial_number || '-'}</td>
                     <td className="px-6 py-4">{getCategoryName(asset.category_id)}</td>
@@ -361,7 +383,7 @@ export default function Inventory() {
           </div>
           
           {hasNextPage && (
-            <div className="p-4 border-t border-border flex justify-center bg-gray-50/50">
+            <div className="p-4 border-t border-border flex justify-center bg-background/50">
               <Button variant="secondary" onClick={() => setCursor(data.nextCursor)}>Load More</Button>
             </div>
           )}

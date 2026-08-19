@@ -18,7 +18,7 @@ export const StatusBadge = ({ status }) => {
   };
   
   return (
-    <span className={cn('px-2.5 py-1 text-xs font-medium rounded-full', colors[status] || 'bg-gray-100 text-gray-800')}>
+    <span className={cn('px-2.5 py-1 text-xs font-medium rounded-full', colors[status] || 'bg-background text-muted')}>
       {status}
     </span>
   );
@@ -49,8 +49,8 @@ export const Button = ({ children, variant = 'primary', size = 'default', classN
 
   const variants = {
     primary: "bg-primary text-white shadow-sm hover:bg-primary/90 hover:shadow-md hover:-translate-y-0.5",
-    secondary: "bg-surface text-text border border-border shadow-sm hover:bg-gray-50",
-    outline: "border border-border bg-transparent text-text hover:bg-gray-50",
+    secondary: "bg-surface text-text border border-border shadow-sm hover:bg-background",
+    outline: "border border-border bg-transparent text-text hover:bg-background",
     ghost: "bg-transparent text-muted hover:text-text hover:bg-surface",
     danger: "bg-red-500 text-white shadow-sm hover:bg-red-600 hover:shadow-md hover:-translate-y-0.5"
   };
@@ -67,9 +67,9 @@ export const Modal = ({ isOpen, onClose, title, children }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm transition-opacity">
       <div className="bg-surface border border-border rounded-xl w-full max-w-lg p-6 shadow-2xl relative animate-in zoom-in-95 duration-200">
-        <h2 className="text-xl font-semibold mb-4 text-gray-900">{title}</h2>
+        <h2 className="text-xl font-semibold mb-4 text-text">{title}</h2>
         {children}
-        <button onClick={onClose} className="absolute top-4 right-4 text-muted hover:text-gray-900 transition-colors h-8 w-8 inline-flex items-center justify-center rounded-full hover:bg-gray-100">
+        <button onClick={onClose} className="absolute top-4 right-4 text-muted hover:text-text transition-colors h-8 w-8 inline-flex items-center justify-center rounded-full hover:bg-background">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
         </button>
       </div>
@@ -110,8 +110,8 @@ export const EmptyState = ({ icon: Icon, title, description, action }) => {
       <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
         <Icon className="h-6 w-6 text-primary" />
       </div>
-      <h3 className="text-lg font-semibold text-gray-900 mb-1">{title}</h3>
-      <p className="text-sm text-gray-500 max-w-sm mb-6">{description}</p>
+      <h3 className="text-lg font-semibold text-text mb-1">{title}</h3>
+      <p className="text-sm text-muted max-w-sm mb-6">{description}</p>
       {action && action}
     </div>
   );
