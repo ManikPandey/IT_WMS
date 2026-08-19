@@ -217,6 +217,19 @@ app.post('/users', requireAuth, requireRole('ADMIN'), async (req, res) => {
   res.status(201).json({ id: user.id, username, email });
 });
 
+app.patch('/users/:id/password', requireAuth, requireRole('ADMIN'), async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { password } = req.body;
+    if (!password || password.length < 2) return res.status(400).json({ error: 'Password too short' });
+    const password_hash = await bcrypt.hash(password, 10);
+    await prisma.user.update({ where: { id }, data: { password_hash } });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 // Asset Requests
 const CreateAssetRequestSchema = z.object({
@@ -249,41 +262,56 @@ app.get('/asset-requests', requireAuth, async (req, res) => {
 
 app.patch('/asset-requests/:id/approve', requireAuth, requireRole('ADMIN'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const assetRequest = await prisma.assetRequest.findUnique({ where: { id } });
   
-  if (!assetRequest) return res.status(404).json({ error: 'Request not found' });
-  if (assetRequest.status !== 'PENDING') return res.status(400).json({ error: 'Already processed' });
+  // Conditional update to prevent Lost Update race conditions
+  const updateResult = await prisma.assetRequest.updateMany({
+    where: { id, status: 'PENDING' },
+    data: { status: 'PROCESSING', approved_by: req.user.id }
+  });
+  
+  if (updateResult.count === 0) return res.status(409).json({ error: 'Request not found or already processed' });
+  
+  const assetRequest = await prisma.assetRequest.findUnique({ where: { id } });
 
   try {
     // Attempt allocation via Circuit Breaker
     await allocateBreaker.fire({
-      assetType: 'CATEGORY_FALLBACK', // In a real system, translate category_id to type, or support category_id allocation
+      assetType: 'LAPTOPS', // Hardcoded fallback for now, normally fetch category
       assignedTo: assetRequest.requested_by,
       warehouseId: 1
     }, req.id);
 
     const updated = await prisma.assetRequest.update({
       where: { id },
-      data: { status: 'APPROVED', approved_by: req.user.id, resolved_at: new Date() }
+      data: { status: 'APPROVED', resolved_at: new Date() }
     });
     res.json(updated);
   } catch (err) {
+    // Revert status on failure
+    // Revert status on failure
+    await prisma.assetRequest.update({
+      where: { id },
+      data: { status: 'PENDING', approved_by: null }
+    });
     req.log.error(err, 'Asset request approval failed during allocation');
+    if (err.message.startsWith('409:')) {
+      return res.status(409).json({ error: err.message.substring(4) });
+    }
     res.status(500).json({ error: 'Failed to allocate asset. Out of stock?' });
   }
 });
 
 app.patch('/asset-requests/:id/reject', requireAuth, requireRole('ADMIN'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const assetRequest = await prisma.assetRequest.findUnique({ where: { id } });
   
-  if (!assetRequest) return res.status(404).json({ error: 'Request not found' });
-  if (assetRequest.status !== 'PENDING') return res.status(400).json({ error: 'Already processed' });
-
-  const updated = await prisma.assetRequest.update({
-    where: { id },
+  const updateResult = await prisma.assetRequest.updateMany({
+    where: { id, status: 'PENDING' },
     data: { status: 'REJECTED', approved_by: req.user.id, resolved_at: new Date() }
   });
+  
+  if (updateResult.count === 0) return res.status(409).json({ error: 'Request not found or already processed' });
+
+  const updated = await prisma.assetRequest.findUnique({ where: { id } });
   res.json(updated);
 });
 

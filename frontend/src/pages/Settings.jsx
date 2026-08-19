@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Modal, useToast, SkeletonRow, EmptyState } from '../components/ui';
-import { Download, Activity } from 'lucide-react';
+import { Download, Activity, Eye, EyeOff, Key } from 'lucide-react';
 
 export default function Settings() {
   const token = localStorage.getItem('token');
@@ -129,6 +129,12 @@ function UsersTab({ token }) {
   const showToast = useToast();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [form, setForm] = useState({ username: '', name: '', email: '', password: '', role: 'VIEWER' });
+  const [showPassword, setShowPassword] = useState(false);
+  
+  // Password Change State
+  const [passwordModalUser, setPasswordModalUser] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
   const { data: users, isLoading } = useQuery({
     queryKey: ['users'],
@@ -153,6 +159,26 @@ function UsersTab({ token }) {
       showToast('User created');
       setIsCreateOpen(false);
       setForm({ username: '', name: '', email: '', password: '', role: 'VIEWER' });
+      setShowPassword(false);
+    },
+    onError: (e) => showToast(e.message, 'error')
+  });
+
+  const changePasswordMutation = useMutation({
+    mutationFn: async ({ id, password }) => {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/users/${id}/password`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ password })
+      });
+      if (!res.ok) throw new Error('Password update failed');
+      return res.json();
+    },
+    onSuccess: () => {
+      showToast('Password updated successfully');
+      setPasswordModalUser(null);
+      setNewPassword('');
+      setShowNewPassword(false);
     },
     onError: (e) => showToast(e.message, 'error')
   });
@@ -172,13 +198,14 @@ function UsersTab({ token }) {
               <th className="px-4 py-3 font-medium">Username</th>
               <th className="px-4 py-3 font-medium">Email</th>
               <th className="px-4 py-3 font-medium">Role</th>
+              <th className="px-4 py-3 font-medium text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan="4" className="px-4 py-6 text-center text-muted">Loading...</td></tr>
+              <tr><td colSpan="5" className="px-4 py-6 text-center text-muted">Loading...</td></tr>
             ) : !Array.isArray(users) || users.length === 0 ? (
-              <tr><td colSpan="4" className="px-4 py-6 text-center text-muted">No users found.</td></tr>
+              <tr><td colSpan="5" className="px-4 py-6 text-center text-muted">No users found.</td></tr>
             ) : (
               users.map(user => (
                 <tr key={user.id} className="border-b border-border last:border-0 hover:bg-surface/50">
@@ -187,6 +214,14 @@ function UsersTab({ token }) {
                   <td className="px-4 py-3 text-muted">{user.email}</td>
                   <td className="px-4 py-3">
                     <span className="px-2 py-1 rounded bg-surface border border-border text-xs">{user.role}</span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button 
+                      onClick={() => setPasswordModalUser(user)}
+                      className="text-muted hover:text-primary transition-colors flex items-center justify-end gap-1 text-xs"
+                    >
+                      <Key size={14} /> Password
+                    </button>
                   </td>
                 </tr>
               ))
@@ -200,17 +235,52 @@ function UsersTab({ token }) {
           <div><label className="block text-sm mb-1">Name</label><input required className="w-full border rounded-md px-3 py-2 text-sm" value={form.name} onChange={e => setForm({...form, name: e.target.value})} /></div>
           <div><label className="block text-sm mb-1">Username</label><input required className="w-full border rounded-md px-3 py-2 text-sm" value={form.username} onChange={e => setForm({...form, username: e.target.value})} /></div>
           <div><label className="block text-sm mb-1">Email</label><input required type="email" className="w-full border rounded-md px-3 py-2 text-sm" value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></div>
-          <div><label className="block text-sm mb-1">Password</label><input required type="password" className="w-full border rounded-md px-3 py-2 text-sm" value={form.password} onChange={e => setForm({...form, password: e.target.value})} /></div>
+          <div>
+            <label className="block text-sm mb-1">Password</label>
+            <div className="relative">
+              <input required type={showPassword ? "text" : "password"} className="w-full border rounded-md px-3 py-2 text-sm pr-10" value={form.password} onChange={e => setForm({...form, password: e.target.value})} />
+              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-text">
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </div>
           <div>
             <label className="block text-sm mb-1">Role</label>
             <select className="w-full border rounded-md px-3 py-2 text-sm" value={form.role} onChange={e => setForm({...form, role: e.target.value})}>
               <option value="VIEWER">VIEWER</option>
               <option value="ADMIN">ADMIN</option>
+              <option value="EMPLOYEE">EMPLOYEE</option>
+              <option value="MAINTENANCE_CREW">MAINTENANCE_CREW</option>
             </select>
           </div>
           <Button type="submit" className="w-full" disabled={createMutation.isPending}>Submit</Button>
         </form>
       </Modal>
+
+      {/* Change Password Modal */}
+      {passwordModalUser && (
+        <Modal isOpen={true} onClose={() => setPasswordModalUser(null)} title={`Change Password for ${passwordModalUser.username}`}>
+          <form onSubmit={e => { e.preventDefault(); changePasswordMutation.mutate({ id: passwordModalUser.id, password: newPassword }); }} className="space-y-4">
+            <div>
+              <label className="block text-sm mb-1">New Password</label>
+              <div className="relative">
+                <input 
+                  required 
+                  type={showNewPassword ? "text" : "password"} 
+                  className="w-full border rounded-md px-3 py-2 text-sm pr-10" 
+                  value={newPassword} 
+                  onChange={e => setNewPassword(e.target.value)} 
+                  minLength={2}
+                />
+                <button type="button" onClick={() => setShowNewPassword(!showNewPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-text">
+                  {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+            <Button type="submit" className="w-full" disabled={changePasswordMutation.isPending || newPassword.length < 2}>Update Password</Button>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 }

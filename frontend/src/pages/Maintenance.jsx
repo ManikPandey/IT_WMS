@@ -77,10 +77,9 @@ export default function Maintenance() {
 
   const startWorkMutation = useMutation({
     mutationFn: async (id) => {
-      const res = await fetch(`${import.meta.env.VITE_INVENTORY_URL}/maintenance/${id}/resolve`, {
+      const res = await fetch(`${import.meta.env.VITE_INVENTORY_URL}/maintenance/${id}/start`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'RUNNING' })
+        headers: { 'Content-Type': 'application/json' }
       });
       if (!res.ok) throw new Error('Failed to start work');
       return res.json();

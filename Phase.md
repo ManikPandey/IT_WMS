@@ -25,6 +25,87 @@ graph TD
 
 ---
 
+
+## User Cycle Diagram (RBAC Workflows)
+
+```mermaid
+sequenceDiagram
+    participant E as Employee
+    participant UI as Frontend App
+    participant C as Core Service
+    participant I as Inventory Service
+    participant M as Maintenance Crew
+    participant A as Admin
+    
+    %% Employee Request Flow
+    E->>UI: Request Asset (Laptop)
+    UI->>C: POST /asset-requests (Token)
+    C-->>UI: 201 Created (Pending)
+    
+    %% Admin Approval
+    A->>UI: View Pending Requests
+    A->>UI: Click "Approve"
+    UI->>C: POST /asset-requests/:id/approve
+    C->>I: POST /allocate?strategy=redis
+    I-->>C: 200 OK (Asset Allocated)
+    C-->>UI: 200 OK (Approved & Allocated)
+    
+    %% Maintenance Flow
+    E->>UI: Report Broken Asset
+    UI->>I: POST /maintenance (Asset ID)
+    I-->>UI: 201 Created (Open Ticket)
+    
+    M->>UI: Login & View Open Tickets
+    M->>UI: Click "Start Work"
+    UI->>I: PATCH /maintenance/:id/start
+    I-->>UI: 200 OK (Running)
+    
+    M->>UI: Upload Bill & Submit
+    UI->>I: PATCH /maintenance/:id/submit-approval
+    I-->>UI: 200 OK (Pending Approval)
+    
+    A->>UI: Review Bill & Approve
+    UI->>I: PATCH /maintenance/:id/approve
+    I-->>UI: 200 OK (Closed & Asset In Stock)
+```
+
+## Function Cycle Diagram (Distributed Saga & CQRS)
+
+```mermaid
+sequenceDiagram
+    participant UI as Client (Admin)
+    participant C as Core Service
+    participant CDB as Core DB
+    participant I as Inventory Service
+    participant IDB as Inventory DB
+    participant R as Redis Streams
+    
+    %% 1. Command Phase
+    UI->>C: POST /purchase-orders/:id/reject
+    C->>CDB: Update PO Status = REJECTED
+    C->>R: XADD asset-events (PO_REJECTED, { po_id: 123 })
+    C-->>UI: 200 OK (Immediate UI Response)
+    
+    %% 2. Async Saga Compensation Phase
+    R-->>I: XREADGROUP (Consumer loop polls Stream)
+    I->>IDB: Start Transaction
+    I->>IDB: Revert Procured Assets to CANCELLED
+    I->>IDB: Insert to Outbox (ASSETS_CANCELLED)
+    I->>IDB: Commit Transaction
+    
+    %% 3. Outbox Relay Phase
+    loop Outbox Relay Worker (every 2s)
+        I->>IDB: SELECT * FROM outbox WHERE published = false
+        I->>R: XADD asset-events (ASSETS_CANCELLED, payload)
+        I->>IDB: UPDATE outbox SET published = true
+    end
+    
+    %% 4. CQRS Read Model Update Phase
+    R-->>C: XREADGROUP (Consumer loop polls Stream)
+    C->>CDB: Append to Audit Logs
+    C->>CDB: Update dashboard_summary (Decrement pending PO count)
+```
+
 ## Completed Phases
 
 ### Phase 0: Foundation
@@ -92,3 +173,14 @@ graph TD
 - **Optimistic Updates**: Integrated TanStack Query `onMutate` for instantaneous UI feedback on asset allocations and PO approvals, rolling back seamlessly on error.
 - **Dark Mode**: Configured CSS variables mapped to Tailwind configuration to support a seamless, system-respecting dark theme toggle across all pages.
 - **Live Concurrency Demo**: Created a dedicated visual dashboard (`/concurrency-demo`) for administrators to fire 100 concurrent allocation requests from the frontend, visually demonstrating the Opossum Circuit Breaker and backend concurrency logic in real-time.
+
+
+### Phase 7: End-to-End Verification & Concurrency Audits
+- **Synthetic Data Seeding**: Built automated node script (`scripts/seed-demo-data.js`) bypassing the frontend to seed 5 categories, 10 role-based users, 100 assets, 15 asset requests, and 15 maintenance tickets over live APIs.
+- **Concurrency Lost Update Fix**: Identified and patched race conditions in `/asset-requests/:id/approve` and `/maintenance/:id/approve` replacing vulnerable `findUnique` -> `update` chains with atomic `updateMany` conditional checks (`status = 'PENDING'`). Verified via multi-actor scripts.
+- **Multi-Actor Load Simulation**: Extended simulation scripts to hammer the system with 10 exact-second concurrent Employee requests followed by 10 concurrent Admin approvals, successfully returning exactly one `200 OK` and nine `409 Conflict (Out of Stock)` safely swallowed by the Opossum Circuit breaker.
+- **Enhanced Role-Based Access Control & Password Management**: 
+  - Finished dynamic routing logic to prevent infinite redirect loops for non-admin roles (Employee/Maintenance Crew).
+  - Built `PATCH /users/:id/password` capabilities to allow Admins full credential management via the Settings panel with UI password visibility toggles.
+  - Added Show/Hide toggles to the main `Login` page.
+- **Maintenance Lifecycle**: Fully realized the `OPEN` -> `RUNNING` -> `PENDING_APPROVAL` -> `CLOSED` workflow by adding backend state transition API endpoints (`/maintenance/:id/start`) and mapping them to the frontend Maintenance Crew dashboards.

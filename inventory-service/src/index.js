@@ -138,16 +138,22 @@ app.get('/categories/search', async (req, res) => {
 app.delete('/categories/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10);
   
-  // Check for subcategories
-  const subcats = await prisma.category.findFirst({ where: { parent_id: id } });
-  if (subcats) return res.status(409).json({ error: 'Cannot delete category with subcategories' });
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Re-check inside transaction to prevent concurrent asset creation races
+      const subcats = await tx.category.findFirst({ where: { parent_id: id } });
+      if (subcats) throw new Error('409:Cannot delete category with subcategories');
 
-  // Check for assets
-  const assets = await prisma.asset.findFirst({ where: { category_id: id } });
-  if (assets) return res.status(409).json({ error: 'Cannot delete category containing assets' });
+      const assets = await tx.asset.findFirst({ where: { category_id: id } });
+      if (assets) throw new Error('409:Cannot delete category containing assets');
 
-  await prisma.category.delete({ where: { id } });
-  res.json({ success: true });
+      await tx.category.delete({ where: { id } });
+    });
+    res.json({ success: true });
+  } catch (err) {
+    if (err.message.startsWith('409:')) return res.status(409).json({ error: err.message.substring(4) });
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
 });
 
 // Removed /dashboard/stats to enforce CQRS in core-service
@@ -223,6 +229,12 @@ app.post('/assets', async (req, res) => {
         warehouse_id, category_id, po_id, jsonb_attributes
       }
     });
+
+    // Keep Redis counter in sync for Option B
+    if (asset.status === 'IN_STOCK') {
+      await redis.incr(`stock:${type}`);
+    }
+
     res.status(201).json(asset);
   } catch (error) {
     if (error instanceof z.ZodError) return res.status(400).json({ error: error.errors });
@@ -388,6 +400,17 @@ app.get('/maintenance', async (req, res) => {
   res.json(tickets);
 });
 
+app.patch('/maintenance/:id/start', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const ticket = await prisma.maintenanceTicket.update({
+      where: { id },
+      data: { status: 'RUNNING' }
+    });
+    res.json(ticket);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.patch('/maintenance/:id/submit-approval', async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -409,10 +432,13 @@ app.patch('/maintenance/:id/approve', async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const result = await prisma.$transaction(async (tx) => {
-      const ticket = await tx.maintenanceTicket.update({
-        where: { id },
+      const updateResult = await tx.maintenanceTicket.updateMany({
+        where: { id, status: 'PENDING_APPROVAL' },
         data: { status: 'CLOSED', resolved_at: new Date(), admin_note: null }
       });
+      if (updateResult.count === 0) throw new Error('409:Ticket not found or already processed');
+      
+      const ticket = await tx.maintenanceTicket.findUnique({ where: { id } });
       await tx.asset.update({
         where: { id: ticket.asset_id },
         data: { status: 'IN_STOCK' }
@@ -420,17 +446,23 @@ app.patch('/maintenance/:id/approve', async (req, res) => {
       return ticket;
     });
     res.json(result);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    if (err.message.startsWith('409:')) return res.status(409).json({ error: err.message.substring(4) });
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.patch('/maintenance/:id/reject', async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const { admin_note } = req.body;
-    const ticket = await prisma.maintenanceTicket.update({
-      where: { id },
+    const updateResult = await prisma.maintenanceTicket.updateMany({
+      where: { id, status: 'PENDING_APPROVAL' },
       data: { status: 'RUNNING', admin_note }
     });
+    if (updateResult.count === 0) return res.status(409).json({ error: 'Ticket not found or already processed' });
+    
+    const ticket = await prisma.maintenanceTicket.findUnique({ where: { id } });
     res.json(ticket);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -497,6 +529,23 @@ app.post('/seed', requireAuth, requireRole('ADMIN'), async (req, res) => {
   await redis.set(`stock:${assetType}`, count);
   
   res.json({ message: `Seeded ${count} assets of type ${assetType}, reset Redis counter.` });
+});
+
+app.post('/system/sync-redis', async (req, res) => {
+  try {
+    const categories = await prisma.category.findMany();
+    const results = {};
+    for (const cat of categories) {
+      const count = await prisma.asset.count({
+        where: { type: cat.name.toUpperCase(), status: 'IN_STOCK' }
+      });
+      await redis.set(`stock:${cat.name.toUpperCase()}`, count);
+      results[cat.name] = count;
+    }
+    res.json({ message: 'Redis synchronized with Postgres', stock: results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Options A & B: Concurrency-safe allocation

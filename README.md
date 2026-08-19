@@ -189,6 +189,8 @@ cd frontend && npm run dev
 - **Phase 5.9 (Week 8.5):** Final Polish & Demo UI (Optimistic Updates, Dark Mode, UI Concurrency Simulation).
 - **Phase 6 (Week 9):** Dockerize everything, load balance with Nginx, deploy free tier, k6 load test, generate graphs for README.
 
+- **Phase 7 (Week 10):** End-to-End Verification & Concurrency Audits. Synthetic DB seeding, multi-actor load simulation, strict RBAC routing fixes (infinite loop prevention), Admin password management (show/hide), and full Maintenance lifecycle transitions (`OPEN -> RUNNING -> PENDING_APPROVAL -> CLOSED`).
+
 ---
 
 ## 12. Interview Talking Points This Project Proves

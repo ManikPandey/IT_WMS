@@ -51,6 +51,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   if (!token) return <Navigate to="/login" replace />;
   if (allowedRoles && !allowedRoles.includes(role)) {
     if (role === 'MAINTENANCE_CREW') return <Navigate to="/maintenance" replace />;
+    if (role === 'EMPLOYEE') return <Navigate to="/asset-requests" replace />;
     return <Navigate to="/" replace />;
   }
   return children;

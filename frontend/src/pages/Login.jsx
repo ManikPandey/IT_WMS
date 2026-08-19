@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui';
+import { Eye, EyeOff } from 'lucide-react';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -54,14 +56,23 @@ export default function Login() {
           </div>
           <div>
             <label className="block text-sm font-medium text-text mb-1">Password</label>
-            <input 
-              type="password"
-              required
-              className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-primary"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="admin123"
-            />
+            <div className="relative">
+              <input 
+                type={showPassword ? "text" : "password"}
+                required
+                className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-primary pr-10"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="admin123"
+              />
+              <button 
+                type="button" 
+                onClick={() => setShowPassword(!showPassword)} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-text"
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </div>
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? 'Logging in...' : 'Sign In'}
