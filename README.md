@@ -2,7 +2,7 @@
 
 A MERN-stack IT Asset & Warehouse Management System built to demonstrate real distributed-systems engineering (concurrency control, event-driven communication, idempotency) using a **modular monolith + 2 extracted microservices**, entirely on free-tier infrastructure.
 
-> Built as a fresher-level portfolio project. Every architectural decision below is deliberately scoped to be provable, demoable, and explainable in an interview — not just copy-pasted boilerplate.
+<!-- Built as a fresher-level portfolio project. Every architectural decision below is deliberately scoped to be provable, demoable, and explainable in an interview — not just copy-pasted boilerplate. -->
 
 ---
 
