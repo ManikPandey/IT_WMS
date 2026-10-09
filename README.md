@@ -6,22 +6,22 @@ A MERN-stack IT Asset & Warehouse Management System built to demonstrate real di
 
 ---
 
-## 1. The Interview Pitch
+<!-- ## 1. The Interview Pitch -->
 
-*(When asked "Tell me about a project you are proud of", use this framework to immediately hook the interviewer):*
+<!-- *(When asked "Tell me about a project you are proud of", use this framework to immediately hook the interviewer):* -->
 
-**The Hook (Why you built it):** 
+**Reason why i build this project:** 
 > "Instead of building a standard CRUD application, I built a distributed Warehouse Management System to tackle the exact distributed systems challenges that companies face at scale: dual-write anomalies, race conditions, and cross-service eventual consistency."
 
-**The Architecture (How you built it):** 
+**The Architecture & process:** 
 > "I designed it using a strict Database-per-Service architecture, splitting Identity & Procurement into a Core Service, and Warehouse Operations into an Inventory Service. Because they don't share a database, I implemented the Transactional Outbox pattern and an Event-Driven Saga using Redis Streams to maintain data consistency across boundaries without tight coupling or distributed locks."
 
-**The Proof (How you tested it):** 
+**The Proof :** 
 > "To mathematically prove my architecture was resilient, I deployed the microservices to the cloud and ran concurrent load tests using `k6`. I benchmarked Postgres pessimistic locking against Redis atomic counters to prove zero overselling under heavy concurrency, and implemented Token Bucket rate limiting and Circuit Breakers to prevent cascading failures under stress."
 
 ---
 
-## 2. Tech Stack (100% Free Tier)
+## 1. Tech Stack (100% Free Tier)
 
 | Layer | Tool | Free Tier Notes |
 |---|---|---|
@@ -42,7 +42,7 @@ A MERN-stack IT Asset & Warehouse Management System built to demonstrate real di
 
 ---
 
-## 3. Architecture
+## 2. Architecture
 
 ```mermaid
 graph TD
@@ -69,7 +69,7 @@ Two services only, as scoped:
 
 ---
 
-## 4. The Core Engineering Challenge: Concurrency-Safe Allocation
+## 3. The Core Engineering Challenge: Concurrency-Safe Allocation
 
 Implement **and benchmark both** of these on the same endpoint (`POST /allocate`), then keep the better-performing one live and document the comparison — this comparison is your strongest interview artifact:
 
@@ -100,7 +100,7 @@ if (remaining < 0) {
 
 ---
 
-## 5. Event Flow & the Outbox Pattern (avoiding the dual-write bug)
+## 4. Event Flow & the Outbox Pattern (avoiding the dual-write bug)
 
 Problem: writing to Postgres and publishing to Redis Streams are two separate operations — if the process crashes between them, the event is lost silently.
 
@@ -116,7 +116,7 @@ When a Purchase Order is rejected in `core-service`, a `PO_REJECTED` event is re
 
 ---
 
-## 6. Database Schema (per service)
+## 5. Database Schema (per service)
 
 **Inventory DB:**
 ```
@@ -133,7 +133,7 @@ audit_log (id, event_type, entity_id, payload_json, processed_event_id, created_
 
 ---
 
-## 7. Asset State Machine
+## 6. Asset State Machine
 
 | Current State | Allowed Next States | Trigger |
 |---|---|---|
@@ -148,7 +148,7 @@ audit_log (id, event_type, entity_id, payload_json, processed_event_id, created_
 
 ---
 
-## 8. Idempotency (on `POST /purchase-orders/:id/approve`)
+## 7. Idempotency (on `POST /purchase-orders/:id/approve`)
 
 - Client sends header `Idempotency-Key: <uuid>`.
 - Server checks a Redis key `idem:<key>` (TTL 24h) before processing.
@@ -157,7 +157,7 @@ audit_log (id, event_type, entity_id, payload_json, processed_event_id, created_
 
 ---
 
-## 9. Folder Structure
+## 8. Folder Structure
 
 ```
 /nexus-wms
@@ -175,7 +175,7 @@ audit_log (id, event_type, entity_id, payload_json, processed_event_id, created_
 
 ---
 
-## 10. Local Dev Setup
+## 9. Local Dev Setup
 
 ```bash
 docker compose up -d        # spins up 2 postgres instances + redis
@@ -186,7 +186,7 @@ cd frontend && npm run dev
 
 ---
 
-## 11. Roadmap
+## 10. Roadmap
 
 - **Phase 0 (Week 1):** Schema design for both DBs + outbox table on paper. Docker Compose skeleton.
 - **Phase 1 (Weeks 2-3):** Build Inventory service alone. Implement Option A (Postgres locking). Prove correctness with concurrent test script.
@@ -202,7 +202,7 @@ cd frontend && npm run dev
 
 ---
 
-## 12. Interview Talking Points This Project Proves
+## 11. Interview Talking Points This Project Proves
 
 - Pessimistic vs optimistic concurrency control, with real benchmark data confirming zero overselling on a horizontally scaled 3-node cluster.
 - Dual-write problem and the Transactional Outbox pattern.
@@ -216,7 +216,7 @@ cd frontend && npm run dev
 
 ---
 
-## 13. Explicit Future Work (say this out loud in interviews — it shows maturity)
+## 12. Explicit Future Work (say this out loud in interviews — it shows maturity)
 
 - Swap Redis Streams for Kafka when message volume/replay needs exceed Redis's practical limits
 - Real Redlock (multi-node) if locks need to survive single-node Redis failure
@@ -225,7 +225,7 @@ cd frontend && npm run dev
 
 ---
 
-## 14. Explicit Consistency Model (CAP Theorem Trade-offs)
+## 13. Explicit Consistency Model (CAP Theorem Trade-offs)
 
 In a distributed environment, we must explicitly choose between Consistency and Availability under Partition (CAP). This system implements a hybrid approach depending on the domain boundary:
 
