@@ -6,9 +6,18 @@ A MERN-stack IT Asset & Warehouse Management System built to demonstrate real di
 
 ---
 
-## 1. Elevator Pitch
+## 1. The Interview Pitch
 
-"I built a MERN-based Warehouse & Procurement system split into a Core service and a separately-deployed Inventory Allocation microservice. To prevent overselling during concurrent asset allocation, I implemented and benchmarked two concurrency strategies — Postgres `SELECT FOR UPDATE SKIP LOCKED` vs an atomic Redis counter — and proved correctness with a k6 load test firing 100 simultaneous requests. Services communicate asynchronously via Redis Streams using a transactional outbox pattern to guarantee at-least-once delivery without dual-write bugs."
+*(When asked "Tell me about a project you are proud of", use this framework to immediately hook the interviewer):*
+
+**The Hook (Why you built it):** 
+> "Instead of building a standard CRUD application, I built a distributed Warehouse Management System to tackle the exact distributed systems challenges that companies face at scale: dual-write anomalies, race conditions, and cross-service eventual consistency."
+
+**The Architecture (How you built it):** 
+> "I designed it using a strict Database-per-Service architecture, splitting Identity & Procurement into a Core Service, and Warehouse Operations into an Inventory Service. Because they don't share a database, I implemented the Transactional Outbox pattern and an Event-Driven Saga using Redis Streams to maintain data consistency across boundaries without tight coupling or distributed locks."
+
+**The Proof (How you tested it):** 
+> "To mathematically prove my architecture was resilient, I deployed the microservices to the cloud and ran concurrent load tests using `k6`. I benchmarked Postgres pessimistic locking against Redis atomic counters to prove zero overselling under heavy concurrency, and implemented Token Bucket rate limiting and Circuit Breakers to prevent cascading failures under stress."
 
 ---
 

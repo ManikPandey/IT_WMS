@@ -2,3 +2,5 @@ core-service/node_modules/
 inventory-service/node_modules/
 inventory-service/.env
 /.env
+/node_modules
+INTERVIEW_QNA.md
