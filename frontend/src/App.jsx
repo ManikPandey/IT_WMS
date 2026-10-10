@@ -16,6 +16,7 @@ import ConcurrencyDemo from './pages/ConcurrencyDemo';
 import { ToastProvider } from './components/ui';
 import { fetchWithAuth } from './utils/api';
 import { useTheme } from './components/ThemeProvider';
+import ProductTour from './components/ProductTour';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false } }
@@ -24,10 +25,12 @@ const queryClient = new QueryClient({
 const SidebarItem = ({ icon: Icon, label, to, isCollapsed }) => {
   const location = useLocation();
   const isActive = location.pathname === to;
+  const tourId = `tour-sidebar-${label.toLowerCase().replace(/\s+/g, '-')}`;
   
   return (
     <Link
       to={to}
+      id={tourId}
       className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group relative
         ${isActive 
           ? 'bg-primary/10 text-primary font-medium' 
@@ -151,6 +154,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
         <Router>
+          <ProductTour />
           <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<ProtectedRoute allowedRoles={['ADMIN', 'VIEWER']}><Layout><Dashboard /></Layout></ProtectedRoute>} />

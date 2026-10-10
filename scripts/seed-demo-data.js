@@ -197,11 +197,11 @@ async function run() {
     await login();
     console.log('\nWiping old data from Core DB...');
     const coreWipe = await fetchWithAuth(`${API_URL}/system/wipe`, { method: 'DELETE' });
-    console.log(await coreWipe.text());
+    console.log(coreWipe.message || coreWipe);
 
     console.log('Wiping old data from Inventory DB...');
     const invWipe = await fetchWithAuth(`${INVENTORY_URL}/system/wipe`, { method: 'DELETE' });
-    console.log(await invWipe.text());
+    console.log(invWipe.message || invWipe);
 
     const categories = await seedCategories();
     if(categories.length === 0) {

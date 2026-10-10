@@ -63,7 +63,7 @@ const ConcurrencyDemo = () => {
       </div>
 
       <div className="bg-surface  rounded-xl border border-border  p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-8 demo-controls">
           <div>
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <Activity className="text-primary" size={20} />
