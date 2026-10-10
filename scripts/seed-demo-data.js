@@ -195,12 +195,21 @@ async function seedMaintenance() {
 async function run() {
   try {
     await login();
+    console.log('\nWiping old data from Core DB...');
+    const coreWipe = await fetchWithAuth(`${API_URL}/system/wipe`, { method: 'DELETE' });
+    console.log(await coreWipe.text());
+
+    console.log('Wiping old data from Inventory DB...');
+    const invWipe = await fetchWithAuth(`${INVENTORY_URL}/system/wipe`, { method: 'DELETE' });
+    console.log(await invWipe.text());
+
     const categories = await seedCategories();
     if(categories.length === 0) {
       console.log('Fetching existing categories...');
       const catsRes = await fetchWithAuth(`${INVENTORY_URL}/categories`);
       categories.push(...catsRes);
     }
+
     await seedUsers();
     await seedAssets(categories);
     await seedRequests(categories);
@@ -218,6 +227,14 @@ async function run() {
       console.error('Failed to sync Redis');
     }
 
+    
+    console.log('\nSynchronizing CQRS Dashboard Stats...');
+    const cqrsRes = await fetch(`${API_URL}/system/sync-cqrs`, { method: 'POST' });
+    if (cqrsRes.ok) {
+      console.log('CQRS Dashboard hard-synced successfully');
+    } else {
+      console.error('Failed to hard-sync CQRS');
+    }
     console.log('\n✅ Seeding Complete! The system is fully hydrated and ready for demo.');
   } catch (err) {
     console.error('\n❌ Seeding failed:', err.message);

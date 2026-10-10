@@ -11,6 +11,7 @@ const ConcurrencyDemo = () => {
 
   const successCount = results.filter(r => r.status === 200).length;
   const failCount = results.filter(r => r.status === 400 || r.status === 409).length;
+  const breakerCount = results.filter(r => r.status !== 200 && r.status !== 400 && r.status !== 409).length;
   const pendingCount = total - results.length;
 
   const handleSimulate = async () => {
@@ -40,8 +41,8 @@ const ConcurrencyDemo = () => {
           setResults(prev => [...prev, { index, status: res.status }]);
           return res;
         } catch (error) {
-          setResults(prev => [...prev, { index, status: 500 }]);
-          return { status: 500 };
+          setResults(prev => [...prev, { index, status: 503 }]);
+          return { status: 503 };
         }
       });
 
@@ -85,16 +86,24 @@ const ConcurrencyDemo = () => {
           <div className="flex justify-between text-sm font-medium">
             <span className="text-success">Success: {successCount}</span>
             <span className="text-warning">Out of Stock: {failCount}</span>
+            <span className="text-error">Breaker Tripped/Timeout: {breakerCount}</span>
             <span className="text-muted">Pending: {pendingCount}</span>
           </div>
           <div className="h-4 w-full bg-background  rounded-full overflow-hidden flex">
             <div 
               className="bg-success transition-all duration-300 ease-out h-full" 
               style={{ width: `${(successCount / total) * 100}%` }}
+              title="Successfully allocated"
             />
             <div 
               className="bg-warning transition-all duration-300 ease-out h-full" 
               style={{ width: `${(failCount / total) * 100}%` }}
+              title="Prevented overselling (Out of stock)"
+            />
+            <div 
+              className="bg-error transition-all duration-300 ease-out h-full" 
+              style={{ width: `${(breakerCount / total) * 100}%`, backgroundColor: '#ef4444' }}
+              title="Circuit breaker tripped (Timeout/Overload)"
             />
           </div>
         </div>
@@ -106,12 +115,14 @@ const ConcurrencyDemo = () => {
             let bgColor = 'bg-background ';
             if (result) {
               if (result.status === 200) bgColor = 'bg-success';
-              else bgColor = 'bg-warning';
+              else if (result.status === 400 || result.status === 409) bgColor = 'bg-warning';
+              else bgColor = 'bg-error'; // Assuming 'bg-error' or we can hardcode 'bg-red-500'
             }
             return (
               <div 
                 key={i} 
                 className={`h-8 rounded ${bgColor} transition-colors duration-300 flex items-center justify-center text-xs text-white/90`}
+                style={bgColor === 'bg-error' ? { backgroundColor: '#ef4444' } : {}}
                 title={result ? `Status: ${result.status}` : 'Pending'}
               >
                 {result ? result.status : ''}

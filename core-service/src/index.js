@@ -621,6 +621,37 @@ app.get('/dashboard/stats', requireAuth, rateLimiter, async (req, res) => {
   }
 });
 
+app.post('/system/sync-cqrs', async (req, res) => {
+  try {
+    const invRes = await fetch(`${INVENTORY_URL}/system/stats`);
+    if (!invRes.ok) throw new Error('Failed to fetch stats from inventory');
+    const stats = await invRes.json();
+    
+    await prisma.dashboardSummary.upsert({
+      where: { id: 1 },
+      update: {
+        total_assets: stats.total_assets,
+        in_stock_assets: stats.in_stock_assets,
+        out_of_stock_assets: stats.out_of_stock_assets,
+        active_issues: stats.active_issues,
+        total_maintenance_cost: stats.total_maintenance_cost
+      },
+      create: {
+        id: 1,
+        total_assets: stats.total_assets,
+        in_stock_assets: stats.in_stock_assets,
+        out_of_stock_assets: stats.out_of_stock_assets,
+        active_issues: stats.active_issues,
+        total_maintenance_cost: stats.total_maintenance_cost
+      }
+    });
+    res.json({ success: true, message: 'CQRS Dashboard Summary hard-synced with Inventory DB' });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: 'Failed to hard-sync CQRS' });
+  }
+});
+
 app.get('/procurement/stats', requireAuth, requireRole(['ADMIN', 'VIEWER']), async (req, res) => {
   try {
     const { range } = req.query;
@@ -756,6 +787,24 @@ app.get('/system/export', requireAuth, requireRole('ADMIN'), async (req, res) =>
     res.setHeader('Content-Disposition', 'attachment; filename="system-export.json"');
     res.send(JSON.stringify(combined, null, 2));
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+app.delete('/system/wipe', requireAuth, requireRole('ADMIN'), async (req, res) => {
+  try {
+    await prisma.auditLog.deleteMany();
+    await prisma.outboxEvent.deleteMany();
+    await prisma.assetRequest.deleteMany();
+    await prisma.purchaseOrder.deleteMany();
+    await prisma.dashboardSummary.deleteMany();
+    await prisma.user.deleteMany({
+      where: { email: { not: 'admin@test.com' } }
+    });
+    res.json({ message: 'Core DB wiped' });
+  } catch (err) {
+    req.log.error(err);
     res.status(500).json({ error: err.message });
   }
 });

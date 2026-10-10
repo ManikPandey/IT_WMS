@@ -506,6 +506,22 @@ app.get('/maintenance/stats', async (req, res) => {
 });
 
 // Seed endpoint for testing
+
+app.delete('/system/wipe', requireAuth, requireRole('ADMIN'), async (req, res) => {
+  try {
+    await prisma.maintenanceTicket.deleteMany();
+    await prisma.asset.deleteMany();
+    await prisma.outboxEvent.deleteMany();
+    await prisma.category.deleteMany();
+    const keys = await redis.keys('stock:*');
+    if (keys.length > 0) await redis.del(...keys);
+    res.json({ message: 'Inventory DB wiped' });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/seed', requireAuth, requireRole('ADMIN'), async (req, res) => {
   const { type, count } = req.body;
   const assetType = type || 'LAPTOP';
@@ -543,6 +559,29 @@ app.post('/system/sync-redis', async (req, res) => {
       results[cat.name] = count;
     }
     res.json({ message: 'Redis synchronized with Postgres', stock: results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/system/stats', async (req, res) => {
+  try {
+    const total_assets = await prisma.asset.count();
+    const in_stock_assets = await prisma.asset.count({ where: { status: 'IN_STOCK' } });
+    const out_of_stock_assets = total_assets - in_stock_assets;
+    const active_issues = await prisma.maintenanceTicket.count({ where: { status: { in: ['OPEN', 'RUNNING', 'PENDING_APPROVAL'] } } });
+    
+    const maintenanceCost = await prisma.maintenanceTicket.aggregate({
+      _sum: { cost: true }
+    });
+    
+    res.json({
+      total_assets,
+      in_stock_assets,
+      out_of_stock_assets,
+      active_issues,
+      total_maintenance_cost: maintenanceCost._sum.cost || 0
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
