@@ -28,13 +28,8 @@ export default function ProductTour() {
       disableBeacon: true,
     },
     {
-      target: '#tour-sidebar-dashboard',
-      content: 'This Dashboard is powered by the CQRS Pattern. Reads are separated from writes to ensure ultra-fast analytics.',
-      placement: 'right',
-    },
-    {
-      target: '#tour-sidebar-inventory',
-      content: 'The Inventory module uses Redis caching and Atomic Counters to keep track of stock lightning fast.',
+      target: 'aside',
+      content: 'This sidebar gives you access to all microservice modules, including CQRS Analytics and Redis Inventory.',
       placement: 'right',
     },
     {
@@ -49,28 +44,30 @@ export default function ProductTour() {
     }
   ];
 
+  
   const handleJoyrideCallback = (data) => {
     const { status, type, index, action } = data;
 
-    if ([STATUS.FINISHED, STATUS.SKIPPED].includes(status)) {
+    if (status === 'finished' || status === 'skipped' || type === 'tour:end') {
       setRun(false);
       localStorage.setItem('hasSeenTour', 'true');
+      return;
     }
 
-    if (type === EVENTS.STEP_AFTER || type === EVENTS.TARGET_NOT_FOUND) {
+    if (type === 'step:after' || type === 'target:not_found') {
       const nextStepIndex = index + (action === 'prev' ? -1 : 1);
       
-      // If we just finished step 3 (Concurrency link) and clicked Next
-      if (index === 3 && action === 'next') {
+      if (index === 2 && action === 'next') {
         navigate('/concurrency-demo');
         setTimeout(() => {
           setStepIndex(nextStepIndex);
-        }, 500); // give the page time to load and render the .demo-controls target
+        }, 800);
       } else {
         setStepIndex(nextStepIndex);
       }
     }
   };
+
 
   return (
     <Joyride
@@ -80,12 +77,16 @@ export default function ProductTour() {
       continuous={true}
       showSkipButton={true}
       showProgress={true}
+      disableScrolling={true}
       callback={handleJoyrideCallback}
       styles={{
         options: {
-          primaryColor: '#0ea5e9', // Tailwind sky-500
-          zIndex: 10000,
+          primaryColor: '#0ea5e9',
+          zIndex: 100000,
         },
+        overlay: {
+          backgroundColor: 'rgba(0, 0, 0, 0.5)'
+        }
       }}
     />
   );
