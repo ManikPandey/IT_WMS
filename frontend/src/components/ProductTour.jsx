@@ -47,24 +47,19 @@ export default function ProductTour() {
   
   const handleJoyrideCallback = (data) => {
     const { status, type, index, action } = data;
+    
+    // Log for debugging if needed
+    console.log('Joyride:', type, action, status, index);
 
-    if (status === 'finished' || status === 'skipped' || type === 'tour:end') {
+    if (status === 'finished' || status === 'skipped') {
       setRun(false);
       localStorage.setItem('hasSeenTour', 'true');
       return;
     }
 
-    if (type === 'step:after' || type === 'target:not_found') {
-      const nextStepIndex = index + (action === 'prev' ? -1 : 1);
-      
-      if (index === 2 && action === 'next') {
-        navigate('/concurrency-demo');
-        setTimeout(() => {
-          setStepIndex(nextStepIndex);
-        }, 800);
-      } else {
-        setStepIndex(nextStepIndex);
-      }
+    // Uncontrolled mode: just navigate when they leave step 2 (0-indexed)
+    if (index === 2 && action === 'next' && type === 'step:after') {
+      navigate('/concurrency-demo');
     }
   };
 
@@ -73,11 +68,10 @@ export default function ProductTour() {
     <Joyride
       steps={steps}
       run={run}
-      stepIndex={stepIndex}
       continuous={true}
       showSkipButton={true}
       showProgress={true}
-      disableScrolling={true}
+      
       callback={handleJoyrideCallback}
       styles={{
         options: {
