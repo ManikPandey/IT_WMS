@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import Joyride, { STATUS, EVENTS } from 'react-joyride';
+import { Joyride, STATUS, EVENTS } from 'react-joyride';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 export default function ProductTour() {
