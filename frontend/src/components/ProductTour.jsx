@@ -71,12 +71,16 @@ export default function ProductTour() {
       continuous={true}
       showSkipButton={true}
       showProgress={true}
-      
+      locale={{ skip: 'Skip Tour', next: 'Next', back: 'Back', last: 'Finish' }}
       callback={handleJoyrideCallback}
       styles={{
         options: {
           primaryColor: '#0ea5e9',
           zIndex: 100000,
+        },
+        buttonSkip: {
+          color: '#ef4444',
+          fontWeight: 600
         },
         overlay: {
           backgroundColor: 'rgba(0, 0, 0, 0.5)'
