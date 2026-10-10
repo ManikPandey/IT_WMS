@@ -22,32 +22,42 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false } }
 });
 
+
+
 const SidebarItem = ({ icon: Icon, label, to, isCollapsed }) => {
   const location = useLocation();
   const isActive = location.pathname === to;
   const tourId = `tour-sidebar-${label.toLowerCase().replace(/\s+/g, '-')}`;
-  
+  const isConcurrency = label === 'Concurrency Demo';
+
+  // Force inline styles to guarantee it works even if Tailwind cache fails
+  const specialStyle = isConcurrency ? {
+    background: isActive ? 'rgba(14, 165, 233, 0.2)' : 'rgba(14, 165, 233, 0.1)',
+  } : {};
+
+  const textStyle = isConcurrency ? {
+    background: 'linear-gradient(to right, #3b82f6, #9333ea)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    fontWeight: 'bold'
+  } : {};
+
   return (
     <Link
       to={to}
       id={tourId}
-      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group relative
-        ${isActive 
-          ? 'bg-primary/10 text-primary font-medium' 
-          : 'text-muted hover:bg-background hover:text-text  '
-        }
-      `}
+      style={specialStyle}
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group relative ${!isConcurrency && isActive ? 'bg-primary/10 text-primary font-medium' : 'text-muted hover:bg-background hover:text-text'}`}
       title={isCollapsed ? label : undefined}
     >
-      <Icon size={20} className={`flex-shrink-0 ${isActive ? 'text-primary' : 'text-muted group-hover:text-text dark:group-hover:text-slate-100'}`} />
-      {!isCollapsed && <span className="truncate">{label}</span>}
+      <Icon size={20} style={isConcurrency ? { color: '#a855f7' } : {}} className={`flex-shrink-0 ${!isConcurrency && isActive ? 'text-primary' : (isConcurrency ? '' : 'group-hover:text-text')}`} />
+      {!isCollapsed && <span className="truncate" style={textStyle}>{label}</span>}
       {isCollapsed && isActive && (
         <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-primary rounded-r-full" />
       )}
     </Link>
   );
 };
-
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const token = localStorage.getItem('token');
   const role = localStorage.getItem('role');

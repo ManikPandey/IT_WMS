@@ -51,7 +51,13 @@ export default function ProductTour() {
     // Log for debugging if needed
     console.log('Joyride:', type, action, status, index);
 
-    if (status === 'finished' || status === 'skipped') {
+    if (
+      status === 'finished' || 
+      status === 'skipped' || 
+      action === 'close' || 
+      action === 'skip' ||
+      type === 'tour:end'
+    ) {
       setRun(false);
       localStorage.setItem('hasSeenTour', 'true');
       return;
@@ -70,6 +76,8 @@ export default function ProductTour() {
       run={run}
       continuous={true}
       showSkipButton={true}
+      showCloseButton={true}
+      hideCloseButton={false}
       showProgress={true}
       locale={{ skip: 'Skip Tour', next: 'Next', back: 'Back', last: 'Finish' }}
       callback={handleJoyrideCallback}
@@ -78,6 +86,7 @@ export default function ProductTour() {
           primaryColor: '#0ea5e9',
           zIndex: 100000,
         },
+        buttonClose: { color: '#ef4444' },
         buttonSkip: {
           color: '#ef4444',
           fontWeight: 600
